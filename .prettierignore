@@ -1,0 +1,5 @@
+pnpm-lock.yaml
+AGENTS.md
+README.md
+packages/plan.md
+fixtures/**/*.capsule
