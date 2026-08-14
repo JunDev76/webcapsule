@@ -1,11 +1,21 @@
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
+*.lcov
 .DS_Store
+Thumbs.db
 *.log
 .env
 .env.*
 !.env.example
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # AI 에이전트 비공개 작업 지침 (백데이팅 규칙 등 미공개)
 AGENTS.md
