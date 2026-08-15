@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "capsuleId": "com.example.guide",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "createdAt": "2026-08-14T00:00:00Z",
+  "minimumRuntimeVersion": "1.0.0",
+  "keyId": "release-2026",
+  "files": [
+    {
+      "path": "index.html",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 12,
+      "mediaType": "text/html"
+    }
+  ],
+  "policy": {
+    "network": { "mode": "deny" },
+    "navigation": { "externalOrigins": [] },
+    "bridgeCapabilities": []
+  }
+}

@@ -1,4 +1,33 @@
 {
   "schemaVersion": 1,
-  "fixtures": []
+  "fixtures": [
+    {
+      "id": "format-v1/manifest",
+      "path": "format-v1/manifest.json",
+      "accepted": true
+    },
+    {
+      "id": "format-v1/update-index",
+      "path": "format-v1/update-index.json",
+      "accepted": true
+    },
+    {
+      "id": "path/traversal-parent",
+      "value": "../secret.txt",
+      "accepted": false,
+      "errorCode": "INVALID_PATH"
+    },
+    {
+      "id": "path/backslash",
+      "value": "assets\\app.js",
+      "accepted": false,
+      "errorCode": "INVALID_PATH"
+    },
+    {
+      "id": "path/unicode-not-nfc",
+      "value": "é.html",
+      "accepted": false,
+      "errorCode": "INVALID_PATH"
+    }
+  ]
 }
