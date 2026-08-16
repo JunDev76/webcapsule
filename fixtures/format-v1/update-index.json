@@ -2,7 +2,15 @@
   "schemaVersion": 1,
   "capsuleId": "com.example.guide",
   "channel": "stable",
-  "releases": [],
+  "releases": [
+    {
+      "version": "1.0.0",
+      "url": "https://example.com/guide-1.0.0.capsule",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 1024,
+      "minimumRuntimeVersion": "1.0.0"
+    }
+  ],
   "keyId": "release-2026",
-  "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
 }

@@ -104,6 +104,7 @@ describe("path validation", () => {
       () => assertSafePathSet(["App.js", "app.js"]),
       WebCapsuleErrorCode.CaseCollision,
     );
+    expect(() => assertSafePathSet(["Ä.js", "ä.js"])).not.toThrow();
     expectCode(
       () => assertSafePathSet(["é.html", "e\u0301.html"]),
       WebCapsuleErrorCode.UnicodeCollision,

@@ -19,7 +19,10 @@ export const capsuleManifestSchema = {
     capsuleId: { type: "string", minLength: 3, maxLength: 255 },
     version: { type: "string" },
     entry: { type: "string", minLength: 1 },
-    createdAt: { type: "string", format: "date-time" },
+    createdAt: {
+      type: "string",
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9][02468]Z$",
+    },
     minimumRuntimeVersion: { type: "string" },
     keyId: { type: "string", minLength: 1, maxLength: 128 },
     files: {
@@ -44,15 +47,25 @@ export const capsuleManifestSchema = {
       properties: {
         network: {
           type: "object",
-          additionalProperties: false,
-          required: ["mode"],
-          properties: {
-            mode: { enum: ["deny", "allowlist"] },
-            origins: {
-              type: "array",
-              items: { type: "string", format: "uri" },
+          oneOf: [
+            {
+              additionalProperties: false,
+              required: ["mode"],
+              properties: { mode: { const: "deny" } },
             },
-          },
+            {
+              additionalProperties: false,
+              required: ["mode", "origins"],
+              properties: {
+                mode: { const: "allowlist" },
+                origins: {
+                  type: "array",
+                  uniqueItems: true,
+                  items: { type: "string", pattern: "^https://[^/]+$" },
+                },
+              },
+            },
+          ],
         },
         navigation: {
           type: "object",
@@ -61,7 +74,8 @@ export const capsuleManifestSchema = {
           properties: {
             externalOrigins: {
               type: "array",
-              items: { type: "string", format: "uri" },
+              uniqueItems: true,
+              items: { type: "string", pattern: "^https://[^/]+$" },
             },
           },
         },
@@ -91,7 +105,12 @@ export const updateIndexSchema = {
   properties: {
     schemaVersion: { const: 1 },
     capsuleId: { type: "string", minLength: 3, maxLength: 255 },
-    channel: { type: "string", minLength: 1, maxLength: 64 },
+    channel: {
+      type: "string",
+      minLength: 1,
+      maxLength: 64,
+      pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
+    },
     keyId: { type: "string", minLength: 1, maxLength: 128 },
     signature: { type: "string", minLength: 88, maxLength: 88 },
     releases: {

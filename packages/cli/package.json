@@ -10,11 +10,20 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json && chmod 755 dist/index.js",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@webcapsule/format": "workspace:*"
+    "@webcapsule/format": "workspace:*",
+    "commander": "14.0.1",
+    "mime-types": "3.0.1",
+    "yauzl": "3.2.0",
+    "yazl": "3.3.1"
+  },
+  "devDependencies": {
+    "@types/mime-types": "3.0.1",
+    "@types/yauzl": "2.10.3",
+    "@types/yazl": "2.4.5"
   }
 }

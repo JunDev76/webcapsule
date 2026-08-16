@@ -33,7 +33,7 @@ export function assertKeyId(value: string): void {
 }
 
 export function assertVersion(value: string): void {
-  if (semver.valid(value) !== value) {
+  if (value.startsWith("v") || semver.parse(value)?.raw !== value) {
     fail(
       WebCapsuleErrorCode.InvalidVersion,
       `Invalid SemVer version: ${value}`,
@@ -111,7 +111,9 @@ export function assertSafePathSet(paths: readonly string[]): void {
     }
     exact.add(path);
 
-    const foldedPath = path.toLowerCase();
+    const foldedPath = path.replace(/[A-Z]/g, (character) =>
+      character.toLowerCase(),
+    );
     const foldedExisting = folded.get(foldedPath);
     if (foldedExisting !== undefined && foldedExisting !== path) {
       fail(
