@@ -148,17 +148,17 @@ afterEach(async () =>
 describe("capsule archive verification", () => {
   it("verifies every content byte and compatibility constraints", async () => {
     const value = await artifact();
-    await expect(
-      verifyCapsule(value.capsule, {
-        publicKey: value.publicKey,
-        expectedId: "com.example.app",
-        expectedKeyId: "release",
-        runtimeVersion: "1.0.0",
-      }),
-    ).resolves.toMatchObject({
+    const verified = await verifyCapsule(value.capsule, {
+      publicKey: value.publicKey,
+      expectedId: "com.example.app",
+      expectedKeyId: "release",
+      runtimeVersion: "1.0.0",
+    });
+    expect(verified).toMatchObject({
       capsuleId: "com.example.app",
       declaredBytes: 5,
     });
+    expect(verified).not.toHaveProperty("trust");
     await expect(
       verifyCapsule(value.capsule, {
         publicKey: value.publicKey,

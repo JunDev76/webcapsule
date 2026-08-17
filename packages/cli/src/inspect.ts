@@ -1,1 +1,1 @@
-export { inspectCapsule, type ArchiveSummary } from "./archive.js";
+export { inspectCapsule } from "./archive.js";

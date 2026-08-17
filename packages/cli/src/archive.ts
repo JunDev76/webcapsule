@@ -36,7 +36,6 @@ interface RawEntry extends Entry {
   readonly fileCommentRaw: Buffer;
 }
 export interface ArchiveSummary {
-  readonly trust: "unverified";
   readonly capsuleId: string;
   readonly version: string;
   readonly keyId: string;
@@ -438,7 +437,6 @@ async function readArchive(
 }
 function summary(manifest: CapsuleManifest): ArchiveSummary {
   return {
-    trust: "unverified",
     capsuleId: manifest.capsuleId,
     version: manifest.version,
     keyId: manifest.keyId,
@@ -448,8 +446,13 @@ function summary(manifest: CapsuleManifest): ArchiveSummary {
     declaredBytes: manifest.files.reduce((sum, file) => sum + file.size, 0),
   };
 }
-export async function inspectCapsule(path: string): Promise<ArchiveSummary> {
-  return summary((await readArchive(path, "inspect")).manifest);
+export async function inspectCapsule(
+  path: string,
+): Promise<ArchiveSummary & { readonly trust: "unverified" }> {
+  return {
+    trust: "unverified",
+    ...summary((await readArchive(path, "inspect")).manifest),
+  };
 }
 function parseExactPublicKey(pem: string) {
   if (
