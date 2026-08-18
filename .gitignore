@@ -1,5 +1,8 @@
 node_modules/
 dist/
+**/build/
+**/.gradle/
+**/.kotlin/
 coverage/
 *.tsbuildinfo
 *.lcov

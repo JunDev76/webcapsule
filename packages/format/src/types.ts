@@ -58,7 +58,7 @@ export interface UpdateIndex extends UnsignedUpdateIndex {
 }
 
 export interface ReadyMessage {
-  readonly type: "webcapsule:ready";
+  readonly type: "ready";
   readonly protocolVersion: 1;
   readonly capsuleId: string;
   readonly version: string;

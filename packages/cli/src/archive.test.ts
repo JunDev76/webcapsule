@@ -209,7 +209,7 @@ describe("capsule archive verification", () => {
       manifestBytes: noncanonical,
     });
     await expect(inspectCapsule(value.capsule)).rejects.toMatchObject({
-      code: "INVALID_ARCHIVE_PROFILE",
+      code: "INVALID_MANIFEST",
     });
   });
 
@@ -234,13 +234,13 @@ describe("capsule archive verification", () => {
       extraEntries: [{ name: "files/unknown.txt", bytes: Buffer.from("x") }],
     });
     await expect(inspectCapsule(value.capsule)).rejects.toMatchObject({
-      code: "INVALID_ARCHIVE_PROFILE",
+      code: "INVALID_ORDER",
     });
     await writeTestArchive(value.capsule, value.manifest, value.privateKey, {
       entries: [],
     });
     await expect(inspectCapsule(value.capsule)).rejects.toMatchObject({
-      code: "INVALID_ARCHIVE_PROFILE",
+      code: "INVALID_ORDER",
     });
   });
 
@@ -413,11 +413,17 @@ describe("capsule archive verification", () => {
       "case collision/order mismatch",
       (bytes: Buffer) => replaceName(bytes, 2, Buffer.from("files/Index.html")),
     ],
-  ] as const)("rejects raw ZIP profile mutation: %s", async (_name, mutate) => {
+  ] as const)("rejects raw ZIP profile mutation: %s", async (name, mutate) => {
     const value = await artifact();
     await mutateFile(value.capsule, mutate);
+    const orderFailures = new Set([
+      "duplicate metadata entry",
+      "case collision/order mismatch",
+    ]);
     await expect(inspectCapsule(value.capsule)).rejects.toMatchObject({
-      code: "INVALID_ARCHIVE_PROFILE",
+      code: orderFailures.has(name)
+        ? "INVALID_ORDER"
+        : "INVALID_ARCHIVE_PROFILE",
     });
   });
 

@@ -1,0 +1,72 @@
+plugins {
+  id 'com.android.library' version '8.7.3'
+  id 'org.jetbrains.kotlin.android' version '2.0.21'
+}
+
+android {
+  namespace 'com.webcapsule.reactnative'
+  compileSdk 35
+
+  defaultConfig {
+    minSdk 26
+    consumerProguardFiles 'consumer-rules.pro'
+    testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+  }
+
+  sourceSets {
+    androidTest.assets.srcDir layout.buildDirectory.dir('generated/androidTest/assets')
+  }
+
+  buildFeatures {
+    buildConfig false
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  testOptions {
+    unitTests.returnDefaultValues = true
+    unitTests.all {
+      systemProperty 'webcapsule.fixtureRoot', file('../../../fixtures').absolutePath
+    }
+  }
+}
+
+tasks.register('copyAndroidTestFixtures', Copy) {
+  from('../../../fixtures/capsules') {
+    include 'valid-minimal.capsule', 'android-e2e-v1.capsule', 'android-e2e-v2.capsule', 'android-e2e-iframe.capsule'
+    into 'webcapsule'
+  }
+  from('../../../fixtures/keys/test-only-public.pem') {
+    into 'keys'
+  }
+  into layout.buildDirectory.dir('generated/androidTest/assets')
+}
+
+tasks.configureEach {
+  if (name == 'mergeDebugAndroidTestAssets') {
+    dependsOn tasks.named('copyAndroidTestFixtures')
+  }
+}
+
+dependencies {
+  compileOnly 'com.facebook.react:react-android:0.76.9'
+  implementation 'com.google.crypto.tink:tink-android:1.15.0'
+  implementation 'androidx.core:core:1.15.0'
+  implementation 'androidx.webkit:webkit:1.12.1'
+  implementation 'com.fasterxml.jackson.core:jackson-core:2.18.2'
+  implementation 'io.github.erdtman:java-json-canonicalization:1.1'
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.14.1'
+  testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+  androidTestImplementation 'androidx.test:core-ktx:1.6.1'
+  androidTestImplementation 'androidx.test:runner:1.6.2'
+  androidTestImplementation 'androidx.test:rules:1.6.1'
+  androidTestImplementation 'androidx.test.ext:junit-ktx:1.2.1'
+}

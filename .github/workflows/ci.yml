@@ -26,3 +26,52 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  android-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-35"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm android:compile
+      - run: pnpm android:test
+      - run: pnpm android:assemble
+      - run: pnpm --filter @webcapsule/react-native test
+
+  android-instrumentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm fixtures:check
+      - uses: reactivecircus/android-emulator-runner@v2.34.0
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: pnpm android:connected

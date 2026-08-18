@@ -3,31 +3,441 @@
   "fixtures": [
     {
       "id": "format-v1/manifest",
+      "kind": "manifest",
       "path": "format-v1/manifest.json",
-      "accepted": true
+      "accepted": true,
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "format-v1/update-index",
+      "kind": "update-index",
       "path": "format-v1/update-index.json",
-      "accepted": true
+      "accepted": true,
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "path/traversal-parent",
+      "kind": "path",
       "value": "../secret.txt",
       "accepted": false,
-      "errorCode": "INVALID_PATH"
+      "errorCode": "INVALID_PATH",
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "path/backslash",
+      "kind": "path",
       "value": "assets\\app.js",
       "accepted": false,
-      "errorCode": "INVALID_PATH"
+      "errorCode": "INVALID_PATH",
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "path/unicode-not-nfc",
+      "kind": "path",
       "value": "é.html",
       "accepted": false,
-      "errorCode": "INVALID_PATH"
+      "errorCode": "INVALID_PATH",
+      "platforms": ["typescript", "android", "ios"]
+    },
+    {
+      "id": "valid-minimal",
+      "kind": "capsule",
+      "path": "capsules/valid-minimal.capsule",
+      "accepted": true,
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "android-e2e-v1",
+      "kind": "capsule",
+      "path": "capsules/android-e2e-v1.capsule",
+      "accepted": true,
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "android-e2e-v2",
+      "kind": "capsule",
+      "path": "capsules/android-e2e-v2.capsule",
+      "accepted": true,
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "android-e2e-iframe",
+      "kind": "capsule",
+      "path": "capsules/android-e2e-iframe.capsule",
+      "accepted": true,
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "signature-mismatch",
+      "kind": "capsule",
+      "path": "capsules/signature-mismatch.capsule",
+      "accepted": false,
+      "errorCode": "SIGNATURE_MISMATCH",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "content-hash-mismatch",
+      "kind": "capsule",
+      "path": "capsules/content-hash-mismatch.capsule",
+      "accepted": false,
+      "errorCode": "HASH_MISMATCH",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "duplicate-nested-json-key",
+      "kind": "capsule",
+      "path": "capsules/duplicate-nested-json-key.capsule",
+      "accepted": false,
+      "errorCode": "DUPLICATE_JSON_KEY",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "noncanonical-manifest",
+      "kind": "capsule",
+      "path": "capsules/noncanonical-manifest.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_MANIFEST",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "unknown-content",
+      "kind": "capsule",
+      "path": "capsules/unknown-content.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ORDER",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "missing-content",
+      "kind": "capsule",
+      "path": "capsules/missing-content.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ORDER",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "malformed-signature",
+      "kind": "capsule",
+      "path": "capsules/malformed-signature.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_SIGNATURE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "id-mismatch",
+      "kind": "capsule",
+      "path": "capsules/id-mismatch.capsule",
+      "accepted": false,
+      "errorCode": "ID_MISMATCH",
+      "verification": {
+        "expectedCapsuleId": "com.other.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "key-id-absent",
+      "kind": "capsule",
+      "path": "capsules/key-id-absent.capsule",
+      "accepted": false,
+      "errorCode": "KEY_ID_MISMATCH",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "trustedKeyId": "other"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "runtime-incompatible",
+      "kind": "capsule",
+      "path": "capsules/runtime-incompatible.capsule",
+      "accepted": false,
+      "errorCode": "RUNTIME_INCOMPATIBLE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "0.9.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "local-central-filename-mismatch",
+      "kind": "capsule",
+      "path": "capsules/local-central-filename-mismatch.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "raw-backslash",
+      "kind": "capsule",
+      "path": "capsules/raw-backslash.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "path-traversal",
+      "kind": "capsule",
+      "path": "capsules/path-traversal.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "ascii-case-collision",
+      "kind": "capsule",
+      "path": "capsules/ascii-case-collision.capsule",
+      "accepted": false,
+      "errorCode": "CASE_COLLISION",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "non-nfc",
+      "kind": "capsule",
+      "path": "capsules/non-nfc.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_PATH",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "encrypted-bit",
+      "kind": "capsule",
+      "path": "capsules/encrypted-bit.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "unsupported-flags",
+      "kind": "capsule",
+      "path": "capsules/unsupported-flags.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "archive-comment",
+      "kind": "capsule",
+      "path": "capsules/archive-comment.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "entry-comment",
+      "kind": "capsule",
+      "path": "capsules/entry-comment.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "central-extra",
+      "kind": "capsule",
+      "path": "capsules/central-extra.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "local-extra",
+      "kind": "capsule",
+      "path": "capsules/local-extra.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "wrong-mode",
+      "kind": "capsule",
+      "path": "capsules/wrong-mode.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "nonunix-mode",
+      "kind": "capsule",
+      "path": "capsules/nonunix-mode.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "symlink-mode",
+      "kind": "capsule",
+      "path": "capsules/symlink-mode.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "fifo-mode",
+      "kind": "capsule",
+      "path": "capsules/fifo-mode.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "store-method",
+      "kind": "capsule",
+      "path": "capsules/store-method.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "timestamp-mismatch",
+      "kind": "capsule",
+      "path": "capsules/timestamp-mismatch.capsule",
+      "accepted": false,
+      "errorCode": "INVALID_ARCHIVE_PROFILE",
+      "verification": {
+        "expectedCapsuleId": "com.example.fixture",
+        "runtimeVersion": "1.0.0",
+        "trustedPublicKey": "keys/test-only-public.pem"
+      },
+      "platforms": ["typescript", "android"]
     }
   ]
 }

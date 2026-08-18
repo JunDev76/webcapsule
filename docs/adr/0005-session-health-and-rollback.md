@@ -9,3 +9,5 @@ Each WebView session is pinned to the complete version selected at creation. Pen
 ## Consequences
 
 Registry changes never mix resources within a running session. Loading the entry document alone is not evidence of health.
+
+M3 implements the ready and stabilization health commit but not automatic retry, blocking, or rollback coordination. The normative Android M3 timing, matching, and failure behavior is defined in [`specs/android-runtime-v1.md`](../../specs/android-runtime-v1.md).

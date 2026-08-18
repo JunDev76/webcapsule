@@ -95,7 +95,7 @@ webcapsule verify guide-1.0.0.capsule \
 WebCapsule 패키지는 공개 npm 패키지로 배포하며, 사용자는 자신의 React Native 앱에 설치하여 사용한다.
 
 ```bash
-pnpm add @webcapsule/react-native react-native-webview
+pnpm add @webcapsule/react-native
 ```
 
 ```tsx
@@ -332,8 +332,8 @@ WebView 세션은 시작할 때 선택한 버전에 고정한다. 실행 중 업
 웹 콘텐츠가 초기화를 완료하면 다음 메시지를 보낸다.
 
 ```js
-window.ReactNativeWebView.postMessage(JSON.stringify({
-  type: "webcapsule:ready",
+window.WebCapsuleBridge.postMessage(JSON.stringify({
+  type: "ready",
   protocolVersion: 1,
   capsuleId: "com.example.guide",
   version: "1.1.0"
@@ -382,7 +382,7 @@ window.ReactNativeWebView.postMessage(JSON.stringify({
 - Kotlin
 - `WebViewAssetLoader`
 - 로컬 HTTPS 형태의 origin
-- `react-native-webview` 연동
+- WebCapsule 전용 native `WebView`
 
 예시:
 

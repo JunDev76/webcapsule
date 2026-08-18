@@ -10,11 +10,28 @@
     }
   },
   "files": [
-    "dist"
+    "android/build.gradle",
+    "android/consumer-rules.pro",
+    "android/gradle.properties",
+    "android/src/main",
+    "dist",
+    "react-native.config.js"
   ],
   "scripts": {
+    "android:compile": "android/gradlew -p android compileDebugKotlin",
+    "android:test": "android/gradlew -p android testDebugUnitTest",
+    "android:assemble": "android/gradlew -p android assembleRelease",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18.2.0 <20",
+    "react-native": ">=0.76.0 <0.77.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.79",
+    "react": "18.3.1",
+    "react-native": "0.76.9"
   }
 }

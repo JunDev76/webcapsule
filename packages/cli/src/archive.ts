@@ -7,6 +7,7 @@ import { open, stat } from "node:fs/promises";
 
 import {
   CAPSULE_LIMITS,
+  WebCapsuleErrorCode,
   WebCapsuleFormatError,
   assertCapsuleId,
   assertKeyId,
@@ -61,11 +62,7 @@ type ReadMode = "inspect" | "verify";
 
 function archiveError(message: string, cause?: unknown): WebCapsuleCliError {
   if (cause instanceof WebCapsuleFormatError)
-    return new WebCapsuleCliError(
-      cause.code as unknown as WebCapsuleCliErrorCode,
-      message,
-      { cause },
-    );
+    return new WebCapsuleCliError(cause.code, message, { cause });
   return new WebCapsuleCliError(
     WebCapsuleCliErrorCode.InvalidArchiveProfile,
     message,
@@ -80,7 +77,7 @@ function openZip(path: string): Promise<ZipFile> {
         lazyEntries: true,
         decodeStrings: true,
         validateEntrySizes: true,
-        strictFileNames: true,
+        strictFileNames: false,
         autoClose: false,
       },
       (error, zip) =>
@@ -316,12 +313,18 @@ function parseMetadata(
   if (
     !manifestBytes.equals(Buffer.from(`${canonicalJson(manifest)}\n`, "utf8"))
   )
-    throw archiveError("capsule.json is not canonical");
+    throw new WebCapsuleCliError(
+      WebCapsuleErrorCode.InvalidManifest,
+      "capsule.json is not canonical",
+    );
   if (
     signatureBytes.length !== SIGNATURE_BYTES ||
     !/^[A-Za-z0-9+/]{86}==\n$/.test(signatureBytes.toString("ascii"))
   )
-    throw archiveError("capsule.sig encoding is invalid");
+    throw new WebCapsuleCliError(
+      WebCapsuleErrorCode.InvalidSignature,
+      "capsule.sig encoding is invalid",
+    );
   return manifest;
 }
 async function readArchive(
@@ -388,6 +391,8 @@ async function readArchive(
       consumeEntry(zip, entries[1]!, SIGNATURE_BYTES, false),
     ]);
     const manifest = parseMetadata(metadata[0].bytes, metadata[1].bytes);
+    for (const entry of entries)
+      await assertLocalHeader(handle, archiveStat.size, entry);
     const expected = [
       "capsule.json",
       "capsule.sig",
@@ -397,7 +402,8 @@ async function readArchive(
       expected.length !== names.length ||
       expected.some((name, index) => name !== names[index])
     )
-      throw archiveError(
+      throw new WebCapsuleCliError(
+        WebCapsuleErrorCode.InvalidOrder,
         "Archive content set or byte order does not match manifest",
       );
     const expectedDos = dosTimestamp(new Date(manifest.createdAt));

@@ -1,0 +1,8 @@
+android/.gradle/
+android/.kotlin/
+android/build/
+android/src/test/
+android/settings.gradle
+android/gradlew
+android/gradlew.bat
+android/gradle/

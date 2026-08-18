@@ -1,27 +1,31 @@
-export enum WebCapsuleCliErrorCode {
-  OutputExists = "OUTPUT_EXISTS",
-  KeyGenerationFailed = "KEY_GENERATION_FAILED",
-  InvalidArgument = "INVALID_ARGUMENT",
-  InvalidTimestamp = "INVALID_TIMESTAMP",
-  InvalidInput = "INVALID_INPUT",
-  InvalidPrivateKey = "INVALID_PRIVATE_KEY",
-  InvalidPublicKey = "INVALID_PUBLIC_KEY",
-  LimitExceeded = "LIMIT_EXCEEDED",
-  BuildFailed = "BUILD_FAILED",
-  ArchiveInvalid = "ARCHIVE_INVALID",
-  InvalidArchiveProfile = "INVALID_ARCHIVE_PROFILE",
-  SignatureMismatch = "SIGNATURE_MISMATCH",
-  HashMismatch = "HASH_MISMATCH",
-  IdMismatch = "ID_MISMATCH",
-  KeyIdMismatch = "KEY_ID_MISMATCH",
-  RuntimeIncompatible = "RUNTIME_INCOMPATIBLE",
-}
+import { WebCapsuleErrorCode } from "@webcapsule/format";
+
+export const WebCapsuleCliErrorCode = {
+  OutputExists: WebCapsuleErrorCode.OutputExists,
+  KeyGenerationFailed: WebCapsuleErrorCode.KeyGenerationFailed,
+  InvalidArgument: WebCapsuleErrorCode.InvalidArgument,
+  InvalidTimestamp: WebCapsuleErrorCode.InvalidTimestamp,
+  InvalidInput: WebCapsuleErrorCode.InvalidInput,
+  InvalidPrivateKey: WebCapsuleErrorCode.InvalidPrivateKey,
+  InvalidPublicKey: WebCapsuleErrorCode.InvalidPublicKey,
+  LimitExceeded: WebCapsuleErrorCode.LimitExceeded,
+  BuildFailed: WebCapsuleErrorCode.BuildFailed,
+  ArchiveInvalid: WebCapsuleErrorCode.ArchiveInvalid,
+  InvalidArchiveProfile: WebCapsuleErrorCode.InvalidArchiveProfile,
+  SignatureMismatch: WebCapsuleErrorCode.SignatureMismatch,
+  HashMismatch: WebCapsuleErrorCode.HashMismatch,
+  IdMismatch: WebCapsuleErrorCode.IdMismatch,
+  KeyIdMismatch: WebCapsuleErrorCode.KeyIdMismatch,
+  RuntimeIncompatible: WebCapsuleErrorCode.RuntimeIncompatible,
+} as const;
+
+export type WebCapsuleCliErrorCode = WebCapsuleErrorCode;
 
 export class WebCapsuleCliError extends Error {
-  readonly code: WebCapsuleCliErrorCode;
+  readonly code: WebCapsuleErrorCode;
 
   constructor(
-    code: WebCapsuleCliErrorCode,
+    code: WebCapsuleErrorCode,
     message: string,
     options?: ErrorOptions,
   ) {
