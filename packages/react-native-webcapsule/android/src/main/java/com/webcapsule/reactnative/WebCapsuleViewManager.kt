@@ -27,6 +27,9 @@ class WebCapsuleViewManager : SimpleViewManager<WebCapsuleWebView>() {
       pending[view] = PendingConfig()
       view.errorListener = { code, message -> emitError(view, code, message) }
       view.loadListener = { capsuleId, version -> emitLoad(view, capsuleId, version) }
+      view.rollbackListener = { capsuleId, failedVersion, restoredVersion, reason, generation ->
+        emitRollback(view, capsuleId, failedVersion, restoredVersion, reason, generation)
+      }
     }
 
   @ReactProp(name = "capsuleId")
@@ -88,6 +91,7 @@ class WebCapsuleViewManager : SimpleViewManager<WebCapsuleWebView>() {
   override fun getExportedCustomDirectEventTypeConstants(): Map<String, Any> = mapOf(
     "topLoad" to mapOf("registrationName" to "onLoad"),
     "topError" to mapOf("registrationName" to "onError"),
+    "topRollback" to mapOf("registrationName" to "onRollback"),
   )
 
   private fun readStringMap(value: ReadableMap): Map<String, String> {
@@ -112,6 +116,18 @@ class WebCapsuleViewManager : SimpleViewManager<WebCapsuleWebView>() {
     (view.context as ReactContext)
       .getJSModule(RCTEventEmitter::class.java)
       .receiveEvent(view.id, "topLoad", payload)
+  }
+
+  @Suppress("DEPRECATION")
+  private fun emitRollback(view: WebCapsuleWebView, capsuleId: String, failedVersion: String, restoredVersion: String?, reason: String, generation: String) {
+    val payload = Arguments.createMap().apply {
+      putString("capsuleId", capsuleId)
+      putString("failedVersion", failedVersion)
+      if (restoredVersion == null) putNull("restoredVersion") else putString("restoredVersion", restoredVersion)
+      putString("reason", reason)
+      putString("generation", generation)
+    }
+    (view.context as ReactContext).getJSModule(RCTEventEmitter::class.java).receiveEvent(view.id, "topRollback", payload)
   }
 
   @Suppress("DEPRECATION")

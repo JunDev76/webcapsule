@@ -22,6 +22,7 @@ data class SessionDescriptor(
   val files: Map<String, SessionFile>,
   val trialVersion: String?,
   val trialAttempt: Long?,
+  val trialToken: PendingTrialGuard.Token? = null,
 )
 
 class SessionSelector(
@@ -31,26 +32,36 @@ class SessionSelector(
   private val versions: VersionStore,
   private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
   private val sessionId: () -> String = { UUID.randomUUID().toString() },
+  private val trialGuard: PendingTrialGuard = PendingTrialGuard.process,
+  private val reconcileLocked: () -> TrialOutcome? = { null },
 ) {
   fun select(capsuleId: String): SessionDescriptor = locks.withLock(capsuleId) {
     val recovered = recovery.recoverLocked(capsuleId)
-    var registry = recovered.registry
+    if (!recovered.registry.active.healthy && recovered.registry.pending?.attempts == MAX_PENDING_ATTEMPTS) reconcileLocked()
+    var registry = recovery.recoverLocked(capsuleId).registry
     var attempt: Long? = null
+    var trialToken: PendingTrialGuard.Token? = null
     if (!registry.active.healthy) {
       val pending = registry.pending
         ?: fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Unhealthy active has no pending trial")
-      if (pending.version != registry.active.version || pending.attempts == 9_007_199_254_740_991L) {
-        fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Pending trial cannot be attempted")
+      if (pending.version != registry.active.version || pending.attempts >= MAX_PENDING_ATTEMPTS) {
+        fail(WebCapsuleErrorCode.NO_RUNNABLE_VERSION, "Pending trial attempts are exhausted")
       }
-      attempt = pending.attempts + 1
-      registry = registries.update(capsuleId, registry.generation) { current ->
-        current.copy(
-          generation = current.generation + 1,
-          pending = pending.copy(attempts = attempt),
-        )
+      trialToken = trialGuard.acquire(capsuleId)
+      try {
+        registry = registries.incrementPendingAttempt(capsuleId, registry)
+        attempt = registry.pending!!.attempts
+      } catch (error: Throwable) {
+        trialToken.release()
+        throw error
       }
     }
-    val record = versions.read(capsuleId, registry.active.version)
+    val record = try {
+      versions.read(capsuleId, registry.active.version)
+    } catch (error: Throwable) {
+      trialToken?.release()
+      throw error
+    }
     val digest = MessageDigest.getInstance("SHA-256")
       .digest(VersionRecordCodec.serialize(record))
       .joinToString("") { "%02x".format(it) }
@@ -65,6 +76,7 @@ class SessionSelector(
       files = record.files.associate { it.path to SessionFile(it.path, it.sha256, it.size, it.mediaType) },
       trialVersion = if (registry.active.healthy) null else registry.active.version,
       trialAttempt = attempt,
+      trialToken = trialToken,
     )
   }
 }

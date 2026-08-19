@@ -25,7 +25,8 @@ class UpdateIndexVerifierTest {
     ), pretty = true)
     val index = UpdateIndexVerifier.verify(bytes, "com.example.fixture", "stable", mapOf("test-only" to publicPem))
     assertEquals("2.0.0", UpdateIndexVerifier.select(index, "1.0.0", "1.0.0", emptySet())!!.version)
-    assertNull(UpdateIndexVerifier.select(index, "1.0.0", "2.0.0", emptySet()))
+    assertEquals("3.0.0", UpdateIndexVerifier.select(index, "9.0.0", "2.0.0", setOf("2.0.0"))!!.version)
+    assertNull(UpdateIndexVerifier.select(index, "1.0.0", "2.0.0", setOf("2.0.0")))
   }
 
   @Test fun `rejects equivalent SemVer precedence`() {

@@ -44,37 +44,6 @@ internal class HandlerHealthScheduler(private val handler: Handler) : HealthSche
   override fun cancel(token: Any) { handler.removeCallbacks(token as Runnable) }
 }
 
-internal class HealthCommitter(
-  private val locks: CapsuleLockManager,
-  private val registries: RegistryStore,
-  private val versions: VersionStore,
-) {
-  fun commit(session: SessionDescriptor) = locks.withLock(session.capsuleId) {
-    val registry = registries.read(session.capsuleId)
-      ?: fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Registry disappeared during session")
-    if (registry.generation != session.registryGeneration || registry.active.version != session.version) {
-      fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Registry changed during session")
-    }
-    versions.read(session.capsuleId, session.version)
-    if (registry.active.healthy) return@withLock
-    val pending = registry.pending
-    if (pending?.version != session.trialVersion || pending?.attempts != session.trialAttempt) {
-      fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Pending attempt changed during session")
-    }
-    registries.update(session.capsuleId, session.registryGeneration) { current ->
-      if (current.active.version != session.version || current.active.healthy ||
-        current.pending?.version != session.trialVersion || current.pending?.attempts != session.trialAttempt) {
-        fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Pending trial no longer matches session")
-      }
-      current.copy(
-        generation = current.generation + 1,
-        active = current.active.copy(healthy = true),
-        pending = null,
-      )
-    }
-  }
-}
-
 internal class HealthCoordinator(
   private val session: SessionDescriptor,
   private val scheduler: HealthScheduler,

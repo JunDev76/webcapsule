@@ -24,16 +24,13 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.webcapsule.reactnative.runtime.AndroidRuntimeCoordinator
-import com.webcapsule.reactnative.runtime.CapsuleLockManager
 import com.webcapsule.reactnative.runtime.HandlerHealthScheduler
-import com.webcapsule.reactnative.runtime.HealthCommitter
+import com.webcapsule.reactnative.runtime.TrialOutcome
 import com.webcapsule.reactnative.runtime.HealthCoordinator
 import com.webcapsule.reactnative.runtime.PercentCodec
 import com.webcapsule.reactnative.runtime.PinnedRequestHandler
-import com.webcapsule.reactnative.runtime.RegistryStore
 import com.webcapsule.reactnative.runtime.SessionDescriptor
 import com.webcapsule.reactnative.runtime.StorageLayout
-import com.webcapsule.reactnative.runtime.VersionStore
 import com.webcapsule.reactnative.runtime.WebCapsuleErrorCode
 import com.webcapsule.reactnative.runtime.WebCapsuleException
 import java.util.concurrent.Executors
@@ -57,8 +54,10 @@ class WebCapsuleWebView internal constructor(
   private var health: HealthCoordinator? = null
   private var bootstrap: ScriptHandler? = null
   private var bridgeInstalled = false
+  private var activeSession: SessionDescriptor? = null
   var errorListener: ((String, String) -> Unit)? = null
   var loadListener: ((String, String) -> Unit)? = null
+  var rollbackListener: ((String, String, String?, String, String) -> Unit)? = null
 
   init {
     settings.javaScriptEnabled = true
@@ -90,7 +89,10 @@ class WebCapsuleWebView internal constructor(
     executor.execute {
       try {
         val session = AndroidRuntimeCoordinator(context.applicationContext, storageRootOverride).ensureSession(config)
-        mainHandler.post { if (token == generation.get()) attachSession(session) }
+        mainHandler.post {
+          if (token == generation.get()) attachSession(session)
+          else session.trialToken?.release()
+        }
       } catch (error: Throwable) {
         val failure = error as? WebCapsuleException
         mainHandler.post {
@@ -101,24 +103,47 @@ class WebCapsuleWebView internal constructor(
   }
 
   private fun attachSession(session: SessionDescriptor) {
-    val required = listOf(WebViewFeature.WEB_MESSAGE_LISTENER, WebViewFeature.DOCUMENT_START_SCRIPT)
-    if (required.any { !WebViewFeature.isFeatureSupported(it) }) {
-      emitError(WebCapsuleErrorCode.READY_MESSAGE_INVALID.name, "Required secure WebView bridge features are unavailable")
-      return
-    }
+    activeSession = session
     val token = generation.get()
     val terminal = AtomicBoolean()
-    val layout = storageRootOverride?.let(::StorageLayout)
+    val runtime = AndroidRuntimeCoordinator(context.applicationContext, storageRootOverride)
+    val outcomes = runtime.outcomeCoordinator(requireNotNull(attachedConfig))
+    val required = listOf(WebViewFeature.WEB_MESSAGE_LISTENER, WebViewFeature.DOCUMENT_START_SCRIPT)
+    if (required.any { !WebViewFeature.isFeatureSupported(it) }) {
+      val outcome = try { outcomes.recordExplicitFailure(session) } catch (error: WebCapsuleException) {
+        session.trialToken?.release()
+        if (terminal.compareAndSet(false, true)) emitError(error.code.name, error.message ?: "Trial outcome failed")
+        return
+      }
+      session.trialToken?.release()
+      if (terminal.compareAndSet(false, true)) {
+        val code = WebCapsuleErrorCode.READY_MESSAGE_INVALID.name
+        emitError(code, "Required secure WebView bridge features are unavailable")
+        emitRollback(session, outcome, code)
+      }
+      return
+    }
+    val storageLayout = storageRootOverride?.let(::StorageLayout)
       ?: StorageLayout.forNoBackupFilesDir(context.noBackupFilesDir)
     health = HealthCoordinator(
       session,
       HandlerHealthScheduler(mainHandler),
-      { HealthCommitter(CapsuleLockManager(layout), RegistryStore(layout), VersionStore(layout)).commit(session) },
+      { outcomes.commitHealthy(session) },
       {
+        session.trialToken?.release()
         if (token == generation.get() && terminal.compareAndSet(false, true)) loadListener?.invoke(session.capsuleId, session.version)
       },
       { error ->
-        if (token == generation.get() && terminal.compareAndSet(false, true)) emitError(error.code.name, error.message ?: "Session failed")
+        val outcome = try { outcomes.recordExplicitFailure(session) } catch (outcomeError: WebCapsuleException) {
+          session.trialToken?.release()
+          if (token == generation.get() && terminal.compareAndSet(false, true)) emitError(outcomeError.code.name, outcomeError.message ?: "Trial outcome failed")
+          return@HealthCoordinator
+        }
+        session.trialToken?.release()
+        if (token == generation.get() && terminal.compareAndSet(false, true)) {
+          emitError(error.code.name, error.message ?: "Session failed")
+          emitRollback(session, outcome, error.code.name)
+        }
       },
     )
     val bootstrapJson = "{\"capsuleId\":${json(session.capsuleId)},\"protocolVersion\":1,\"sessionId\":${json(session.sessionId)},\"type\":\"ready\",\"version\":${json(session.version)}}"
@@ -139,7 +164,7 @@ class WebCapsuleWebView internal constructor(
     bridgeInstalled = true
 
     val fatalSent = AtomicBoolean()
-    val handler = PinnedRequestHandler(layout, session) { error ->
+    val handler = PinnedRequestHandler(storageLayout, session) { error ->
       if (fatalSent.compareAndSet(false, true)) post { failSession(WebCapsuleErrorCode.STABILIZATION_FAILED, error.message ?: "Resource failure") }
     }
     val assetLoader = WebViewAssetLoader.Builder().setDomain("webcapsule.local").addPathHandler("/", handler).build()
@@ -212,6 +237,8 @@ class WebCapsuleWebView internal constructor(
   private fun clearSession() {
     health?.close()
     health = null
+    activeSession?.trialToken?.release()
+    activeSession = null
     bootstrap?.remove()
     bootstrap = null
     if (bridgeInstalled) WebViewCompat.removeWebMessageListener(this, BRIDGE_NAME)
@@ -219,6 +246,14 @@ class WebCapsuleWebView internal constructor(
   }
 
   private fun deniedResponse() = WebResourceResponse("text/plain", null, 404, "Not Found", emptyMap(), java.io.InputStream.nullInputStream())
+  private fun emitRollback(session: SessionDescriptor, outcome: TrialOutcome, reason: String) {
+    when (outcome) {
+      is TrialOutcome.RolledBack -> rollbackListener?.invoke(session.capsuleId, outcome.failedVersion, outcome.restoredVersion, reason, outcome.registry.generation.toString())
+      is TrialOutcome.BundledFallback -> rollbackListener?.invoke(session.capsuleId, outcome.failedVersion, outcome.bundledVersion, reason, outcome.registry.generation.toString())
+      is TrialOutcome.Terminal -> rollbackListener?.invoke(session.capsuleId, outcome.failedVersion, null, WebCapsuleErrorCode.NO_RUNNABLE_VERSION.name, session.registryGeneration.toString())
+      else -> Unit
+    }
+  }
   private fun emitError(code: String, message: String) { errorListener?.invoke(code, message) }
   private fun json(value: String): String = org.json.JSONObject.quote(value)
 

@@ -7,7 +7,7 @@ import com.facebook.react.uimanager.ViewManager
 
 class WebCapsulePackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(WebCapsuleUpdateModule(reactContext))
+    listOf(WebCapsuleUpdateModule(reactContext), WebCapsuleStateModule(reactContext))
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
     listOf(WebCapsuleViewManager())

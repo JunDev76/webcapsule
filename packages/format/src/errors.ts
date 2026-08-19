@@ -61,6 +61,9 @@ export enum WebCapsuleErrorCode {
   UpdateInProgress = "UPDATE_IN_PROGRESS",
   UpdateTrialInProgress = "UPDATE_TRIAL_IN_PROGRESS",
   UpdateStateChanged = "UPDATE_STATE_CHANGED",
+  TrialSessionInProgress = "TRIAL_SESSION_IN_PROGRESS",
+  RollbackTargetUnavailable = "ROLLBACK_TARGET_UNAVAILABLE",
+  RollbackFailed = "ROLLBACK_FAILED",
 }
 
 export class WebCapsuleFormatError extends Error {

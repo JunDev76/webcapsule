@@ -1,6 +1,6 @@
 # Android support
 
-The Android runtime targets API 26 and newer and compiles against Android SDK 35. The host application owns `targetSdk`. Signed remote update installation is documented in [`android-updates.md`](android-updates.md).
+The Android runtime targets API 26 and newer and compiles against Android SDK 35. The host application owns `targetSdk`. Signed remote update installation is documented in [`android-updates.md`](android-updates.md), and automatic rollback is documented in [`android-rollback.md`](android-rollback.md).
 
 ## React Native architecture
 
@@ -17,7 +17,7 @@ The library provides its own native `WebView`; it does not depend on or wrap `re
 - `publicKeys`: exact key-ID-to-SPKI-PEM map
 - `runtimeVersion`: explicit runtime SemVer
 
-`onLoad` and `onError` are direct native events. `onLoad` fires exactly once only after a matching ready message and the three-second stabilization interval. `onError` is terminal for that view session and prevents a later `onLoad`.
+`onLoad`, `onError`, and `onRollback` are direct native events. `onLoad` fires exactly once only after a matching ready message and the three-second stabilization interval. `onError` is terminal for that view session and prevents a later `onLoad`. A final failed attempt emits `onError` and one committed `onRollback`.
 
 ## Ready bridge
 
@@ -33,7 +33,7 @@ window.WebCapsuleBridge.postMessage(
 
 The accepted type is exactly `"ready"`. Unknown, missing, duplicate, or incorrectly typed JSON fields fail the session. The message source must be the main frame at exactly `https://webcapsule.local`, and the entry page must already have completed loading.
 
-The ready deadline is 15 seconds from committed session creation using monotonic time. A valid message starts a three-second stabilization interval. Entry-load failure, navigation, an invalid or duplicate ready message, render-process loss, or view teardown prevents a healthy commit. A failure does not trigger rollback or mutate registry state beyond the attempt already recorded before session creation.
+The ready deadline is 15 seconds from committed session creation using monotonic time. A valid message starts a three-second stabilization interval. Entry-load failure, navigation, an invalid or duplicate ready message, or render-process loss prevents a healthy commit and is recorded by the bounded rollback state machine. Normal view teardown only releases its process-local guard; it does not immediately record an explicit failure or refund the attempt.
 
 The dedicated WebView enables JavaScript and DOM storage and disables file access, content access, mixed content, multiple windows, and third-party cookies. Safe Browsing remains enabled.
 

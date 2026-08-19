@@ -3,7 +3,8 @@ package com.webcapsule.reactnative.runtime
 import java.nio.charset.StandardCharsets
 import org.erdtman.jcs.JsonCanonicalizer
 
-private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L
+internal const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L
+internal const val MAX_PENDING_ATTEMPTS = 2L
 
 data class ActiveVersion(val version: String, val healthy: Boolean)
 data class PreviousVersion(val version: String)
@@ -66,7 +67,7 @@ internal object RegistryCodec {
     registry.previous?.let { ManifestParser.assertVersion(it.version) }
     registry.pending?.let {
       ManifestParser.assertVersion(it.version)
-      if (it.attempts !in 0..MAX_SAFE_INTEGER) invalid("Pending attempts are invalid")
+      if (it.attempts !in 0..MAX_PENDING_ATTEMPTS) invalid("Pending attempts are invalid")
     }
     ManifestParser.assertVersion(registry.highestSeenVersion)
     registry.blockedVersions.forEach(ManifestParser::assertVersion)

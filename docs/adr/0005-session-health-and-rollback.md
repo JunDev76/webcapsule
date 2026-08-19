@@ -10,4 +10,6 @@ Each WebView session is pinned to the complete version selected at creation. Pen
 
 Registry changes never mix resources within a running session. Loading the entry document alone is not evidence of health.
 
-M3 implements the ready and stabilization health commit but not automatic retry, blocking, or rollback coordination. The normative Android M3 timing, matching, and failure behavior is defined in [`specs/android-runtime-v1.md`](../../specs/android-runtime-v1.md).
+Android permits exactly two durable pending attempts. The first explicit failure preserves pending state; the second blocks the failed version and atomically restores a completely revalidated previous version. A process crash after the second attempt is reconciled before another session. If previous storage is unusable, only the explicitly trusted bundled capsule may be independently verified and registered as a new unhealthy trial. The initial bundled artifact is not retried after exhausting both attempts.
+
+The normative timing and matching behavior is defined in [`specs/android-runtime-v1.md`](../../specs/android-runtime-v1.md); the rollback state machine is defined in [`specs/android-rollback-v1.md`](../../specs/android-rollback-v1.md).

@@ -117,7 +117,7 @@ The registry MUST NOT reference a version before every blob and its immutable re
 
 ## 7. State transitions
 
-The only M3 transitions are:
+The base runtime transitions are:
 
 ```text
 no registry + verified bundled install -> active(bundled, healthy=false), pending=bundled attempts=0
@@ -128,7 +128,7 @@ matching ready + 3 s stabilization for initial active -> active unchanged except
 matching ready + 3 s stabilization for an active pending trial -> active unchanged except healthy=true; previous remains the prior healthy version; pending=null
 ```
 
-The initial bundled version is not declared healthy until the same ready and stabilization procedure completes. M3 MUST NOT automatically block or roll back a failed pending version. Entry-load failure, invalid ready, timeout, or stabilization failure returns a stable error and preserves the committed registry state except for the already committed attempt increment.
+The initial bundled version is not declared healthy until the same ready and stabilization procedure completes. Automatic failure, blocking, rollback, and exhausted-attempt recovery follow [`android-rollback-v1.md`](android-rollback-v1.md). Entry-load failure, invalid ready, timeout, or stabilization failure never reverses the attempt committed before session creation.
 
 ## 8. Startup recovery and fault outcomes
 
@@ -227,7 +227,10 @@ TypeScript exports these values from `WebCapsuleErrorCode`; Kotlin MUST define a
 | `READY_MESSAGE_INVALID`       | Ready JSON/schema/protocol is invalid                           |
 | `READY_TIMEOUT`               | No matching ready arrives within 15 seconds                     |
 | `STABILIZATION_FAILED`        | Fatal failure occurs during the 3-second interval               |
+| `TRIAL_SESSION_IN_PROGRESS`   | Another pending trial is active in this process                 |
+| `ROLLBACK_TARGET_UNAVAILABLE` | Neither previous nor trusted bundled content is runnable        |
+| `ROLLBACK_FAILED`             | An exact rollback transition or bundled fallback cannot commit  |
 
 ## 14. M3 exclusions
 
-M3 does not implement remote update-index retrieval, capsule network download, staged rollout, CAS garbage collection, iOS, automatic retry/block/rollback coordination, Service Workers, network allowlists, native capability bridges beyond ready, SPA fallback, directory-index fallback, or migration from another storage schema.
+The runtime does not implement staged rollout, CAS garbage collection, iOS, public retry/unblock/force controls, Service Workers, network allowlists, native capability bridges beyond ready, SPA fallback, directory-index fallback, or migration from another storage schema. Remote update behavior is specified separately in [`android-update-v1.md`](android-update-v1.md).

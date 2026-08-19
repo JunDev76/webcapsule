@@ -85,6 +85,69 @@ class RegistryStore(
     }
   }
 
+  fun incrementPendingAttempt(capsuleId: String, expected: Registry): Registry {
+    val pending = expected.pending ?: fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Pending trial is missing")
+    if (expected.active.healthy || expected.active.version != pending.version || pending.attempts >= MAX_PENDING_ATTEMPTS) {
+      fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Pending trial cannot be attempted")
+    }
+    return update(capsuleId, expected.generation) { current ->
+      if (current != expected) fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Registry changed before trial")
+      current.copy(generation = current.generation + 1, pending = pending.copy(attempts = pending.attempts + 1))
+    }
+  }
+
+  fun commitHealthy(capsuleId: String, session: SessionDescriptor): Registry = sessionTransition {
+    update(capsuleId, session.registryGeneration) { current ->
+      assertSession(current, session)
+      current.copy(generation = current.generation + 1, active = current.active.copy(healthy = true), pending = null)
+    }
+  }
+
+  fun rollbackPending(capsuleId: String, session: SessionDescriptor, restoredVersion: String): Registry = sessionTransition {
+    update(capsuleId, session.registryGeneration) { current ->
+      assertSession(current, session)
+      if (current.pending!!.attempts != MAX_PENDING_ATTEMPTS || current.previous?.version != restoredVersion) {
+        fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Final rollback state differs")
+      }
+      current.copy(
+        generation = current.generation + 1,
+        active = ActiveVersion(restoredVersion, true),
+        previous = null,
+        pending = null,
+        blockedVersions = insertBlocked(current.blockedVersions, session.version),
+      )
+    }
+  }
+
+  fun rollbackExhausted(capsuleId: String, expected: Registry, restoredVersion: String): Registry =
+    update(capsuleId, expected.generation) { current ->
+      if (current != expected || current.active.healthy || current.pending?.attempts != MAX_PENDING_ATTEMPTS || current.previous?.version != restoredVersion) {
+        fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Exhausted pending state differs")
+      }
+      current.copy(
+        generation = current.generation + 1,
+        active = ActiveVersion(restoredVersion, true),
+        previous = null,
+        pending = null,
+        blockedVersions = insertBlocked(current.blockedVersions, current.active.version),
+      )
+    }
+
+  fun registerBundledFallback(capsuleId: String, expected: Registry, record: VersionRecord): Registry =
+    update(capsuleId, expected.generation) { current ->
+      if (current != expected || record.capsuleId != capsuleId || record.version == current.active.version) {
+        fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Bundled fallback state differs")
+      }
+      current.copy(
+        generation = current.generation + 1,
+        active = ActiveVersion(record.version, false),
+        previous = null,
+        pending = PendingVersion(record.version, 0),
+        highestSeenVersion = if (ManifestParser.compareVersions(record.version, current.highestSeenVersion) > 0) record.version else current.highestSeenVersion,
+        blockedVersions = insertBlocked(current.blockedVersions, current.active.version),
+      )
+    }
+
   fun update(capsuleId: String, expectedGeneration: Long, transform: (Registry) -> Registry): Registry {
     val current = read(capsuleId) ?: fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Registry is missing")
     if (current.generation != expectedGeneration) fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Registry generation conflict")
@@ -96,4 +159,20 @@ class RegistryStore(
     files(capsuleId).write(RegistryCodec.serialize(transformed), faultInjector)
     return transformed
   }
+
+  private fun <T> sessionTransition(action: () -> T): T = try { action() } catch (error: WebCapsuleException) {
+    if (error.code == WebCapsuleErrorCode.REGISTRY_INVALID) fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Registry changed during session", error)
+    throw error
+  }
+
+  private fun assertSession(current: Registry, session: SessionDescriptor) {
+    if (current.generation != session.registryGeneration || current.active.healthy ||
+      current.active.version != session.version || current.pending?.version != session.trialVersion ||
+      current.pending?.attempts != session.trialAttempt) {
+      fail(WebCapsuleErrorCode.SESSION_MISMATCH, "Pending trial no longer matches session")
+    }
+  }
+
+  private fun insertBlocked(existing: List<String>, version: String): List<String> =
+    (existing + version).distinct().sortedWith { left, right -> -ManifestParser.compareVersions(left, right) }
 }
