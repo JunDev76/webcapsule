@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "capsuleId": "com.example.android.e2e",
+  "channel": "stable",
+  "releases": [
+    {
+      "version": "2.0.0+one",
+      "url": "https://example.com/android-e2e-v2.capsule",
+      "sha256": "8268b9e51bea9ae32be586e394d68f59ccfd7ad73fdad8a26040bd776ead85a2",
+      "size": 2044,
+      "minimumRuntimeVersion": "1.0.0"
+    },
+    {
+      "version": "2.0.0+two",
+      "url": "https://example.com/android-e2e-v2.capsule",
+      "sha256": "8268b9e51bea9ae32be586e394d68f59ccfd7ad73fdad8a26040bd776ead85a2",
+      "size": 2044,
+      "minimumRuntimeVersion": "1.0.0"
+    }
+  ],
+  "keyId": "test-only",
+  "signature": "+3eQhK75kxr6L+UNG5sVI7lQhEnJQ5PWSbZ2Vv5DcBLKL3afHtJVHqwmGHzRA8COGqy9LdOLIlROd9V/qJAbDg=="
+}

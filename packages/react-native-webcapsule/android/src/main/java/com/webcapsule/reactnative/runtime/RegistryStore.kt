@@ -63,6 +63,28 @@ class RegistryStore(
     return registry
   }
 
+  fun registerPendingUpdate(capsuleId: String, expected: Registry, record: VersionRecord): Registry {
+    if (!expected.active.healthy || expected.pending != null) fail(WebCapsuleErrorCode.UPDATE_TRIAL_IN_PROGRESS, "Registry already contains a trial")
+    if (record.capsuleId != capsuleId || ManifestParser.compareVersions(record.version, expected.highestSeenVersion) <= 0) {
+      fail(WebCapsuleErrorCode.UPDATE_STATE_CHANGED, "Update record does not advance the registry")
+    }
+    return try {
+      update(capsuleId, expected.generation) { current ->
+        if (current != expected) fail(WebCapsuleErrorCode.UPDATE_STATE_CHANGED, "Registry changed during update")
+        current.copy(
+          generation = current.generation + 1,
+          active = ActiveVersion(record.version, false),
+          previous = PreviousVersion(current.active.version),
+          pending = PendingVersion(record.version, 0),
+          highestSeenVersion = record.version,
+        )
+      }
+    } catch (error: WebCapsuleException) {
+      if (error.code == WebCapsuleErrorCode.REGISTRY_INVALID) fail(WebCapsuleErrorCode.UPDATE_STATE_CHANGED, "Registry changed during update", error)
+      throw error
+    }
+  }
+
   fun update(capsuleId: String, expectedGeneration: Long, transform: (Registry) -> Registry): Registry {
     val current = read(capsuleId) ?: fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Registry is missing")
     if (current.generation != expectedGeneration) fail(WebCapsuleErrorCode.REGISTRY_INVALID, "Registry generation conflict")

@@ -122,8 +122,8 @@ The only M3 transitions are:
 ```text
 no registry + verified bundled install -> active(bundled, healthy=false), pending=bundled attempts=0
 initial unhealthy active selected -> pending attempts incremented durably before session creation
-healthy active + verified new install -> active unchanged, pending=new
-pending selected -> pending session attempt incremented
+healthy active + verified new install -> active=new healthy=false, previous=old, pending=new attempts=0
+pending active selected -> pending session attempt incremented
 matching ready + 3 s stabilization for initial active -> active unchanged except healthy=true; previous=null; pending=null
 matching ready + 3 s stabilization for an active pending trial -> active unchanged except healthy=true; previous remains the prior healthy version; pending=null
 ```

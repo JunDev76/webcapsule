@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Deterministic security fixture generator. All keys and artifacts are TEST ONLY.
-import { sign } from "node:crypto";
+import { createHash, sign } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import { buildCapsule } from "../packages/cli/dist/build.js";
 import {
   canonicalJson,
   createManifestSignaturePayload,
+  createUpdateIndexSignaturePayload,
 } from "../packages/format/dist/index.js";
 import yazl from "../packages/cli/node_modules/yazl/index.js";
 
@@ -271,12 +272,150 @@ await mutate("store-method", (x) => {
   set16(x, 2, "local", 8, 0);
 });
 await mutate("timestamp-mismatch", (x) => set16(x, 2, "local", 10, 0));
+const updateIndexDirectory = join(fixtures, "update-index-v1");
+await mkdir(updateIndexDirectory, { recursive: true });
+const e2eV2 = await readFile(join(out, "android-e2e-v2.capsule"));
+const baseRelease = {
+  version: "2.0.0",
+  url: "https://example.com/android-e2e-v2.capsule",
+  sha256: createHash("sha256").update(e2eV2).digest("hex"),
+  size: e2eV2.length,
+  minimumRuntimeVersion: "1.0.0",
+};
+const baseIndex = {
+  schemaVersion: 1,
+  capsuleId: "com.example.android.e2e",
+  channel: "stable",
+  releases: [baseRelease],
+  keyId: "test-only",
+};
+function signedIndex(unsigned) {
+  return {
+    ...unsigned,
+    signature: sign(
+      null,
+      createUpdateIndexSignaturePayload(unsigned),
+      privateKey,
+    ).toString("base64"),
+  };
+}
+const updateCases = [];
+async function addIndex(id, value, accepted, errorCode, verification = {}) {
+  await writeFile(
+    join(updateIndexDirectory, `${id}.json`),
+    typeof value === "string" ? value : JSON.stringify(value, null, 2) + "\n",
+  );
+  updateCases.push({
+    id: `update-index-v1/${id}`,
+    kind: "signed-update-index",
+    path: `update-index-v1/${id}.json`,
+    accepted,
+    ...(errorCode ? { errorCode } : {}),
+    verification: {
+      expectedCapsuleId: "com.example.android.e2e",
+      expectedChannel: "stable",
+      expectedKeyId: "test-only",
+      trustedPublicKey: "keys/test-only-public.pem",
+      runtimeVersion: "1.0.0",
+      ...verification,
+    },
+    platforms: ["typescript", "android"],
+  });
+}
+const validSigned = signedIndex(baseIndex);
+await addIndex("valid-signed", validSigned, true);
+await addIndex(
+  "signature-mismatch",
+  { ...validSigned, channel: "beta" },
+  false,
+  "SIGNATURE_MISMATCH",
+  { expectedChannel: "beta" },
+);
+await addIndex(
+  "duplicate-key",
+  JSON.stringify(validSigned).replace(
+    '"channel":"stable"',
+    '"channel":"stable","channel":"stable"',
+  ),
+  false,
+  "DUPLICATE_JSON_KEY",
+);
+await addIndex(
+  "wrong-id",
+  signedIndex({ ...baseIndex, capsuleId: "com.other.app" }),
+  false,
+  "INVALID_UPDATE_INDEX",
+);
+await addIndex(
+  "wrong-channel",
+  signedIndex({ ...baseIndex, channel: "beta" }),
+  false,
+  "INVALID_UPDATE_INDEX",
+);
+await addIndex(
+  "unknown-key",
+  signedIndex({ ...baseIndex, keyId: "unknown" }),
+  false,
+  "KEY_ID_MISMATCH",
+  { expectedKeyId: "unknown" },
+);
+for (const [id, url] of [
+  ["http-url", "http://example.com/x"],
+  ["userinfo-url", "https://u@example.com/x"],
+  ["fragment-url", "https://example.com/x#f"],
+  ["explicit-port-url", "https://example.com:443/x"],
+])
+  await addIndex(
+    id,
+    signedIndex({ ...baseIndex, releases: [{ ...baseRelease, url }] }),
+    false,
+    "INVALID_URL",
+  );
+await addIndex(
+  "unsorted",
+  signedIndex({
+    ...baseIndex,
+    releases: [{ ...baseRelease, version: "1.5.0" }, baseRelease],
+  }),
+  false,
+  "INVALID_ORDER",
+);
+await addIndex(
+  "equivalent-semver",
+  signedIndex({
+    ...baseIndex,
+    releases: [
+      { ...baseRelease, version: "2.0.0+one" },
+      { ...baseRelease, version: "2.0.0+two" },
+    ],
+  }),
+  false,
+  "INVALID_ORDER",
+);
+await addIndex(
+  "malformed-signature",
+  { ...validSigned, signature: "bad" },
+  false,
+  "INVALID_SIGNATURE",
+);
+await addIndex(
+  "runtime-incompatible-valid-signature",
+  signedIndex({
+    ...baseIndex,
+    releases: [{ ...baseRelease, minimumRuntimeVersion: "9.0.0" }],
+  }),
+  true,
+  undefined,
+);
 await rm(work, { recursive: true, force: true });
 const contractPath = join(fixtures, "expected-results.json");
 const contract = JSON.parse(await readFile(contractPath, "utf8"));
+const updateDefinitions = updateCases;
 contract.fixtures = contract.fixtures
-  .filter((value) => value.kind !== "capsule")
-  .concat(definitions);
+  .filter(
+    (value) => value.kind !== "capsule" && value.kind !== "signed-update-index",
+  )
+  .concat(definitions, updateDefinitions);
 await writeFile(contractPath, JSON.stringify(contract, null, 2) + "\n");
 function eocd(x) {
   for (let i = x.length - 22; i >= Math.max(0, x.length - 65557); i--)

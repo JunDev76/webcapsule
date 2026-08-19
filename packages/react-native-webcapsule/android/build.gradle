@@ -46,6 +46,9 @@ tasks.register('copyAndroidTestFixtures', Copy) {
   from('../../../fixtures/keys/test-only-public.pem') {
     into 'keys'
   }
+  from('../../../fixtures/update-index-v1/valid-signed.json') {
+    into 'update-index-v1'
+  }
   into layout.buildDirectory.dir('generated/androidTest/assets')
 }
 

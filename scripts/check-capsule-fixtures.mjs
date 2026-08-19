@@ -5,17 +5,23 @@ import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 const root = resolve(import.meta.dirname, "..");
 async function snapshot() {
-  const files = (await readdir(resolve(root, "fixtures/capsules")))
-    .filter((x) => x.endsWith(".capsule"))
-    .sort();
+  const targets = [
+    ["capsules", ".capsule"],
+    ["update-index-v1", ".json"],
+  ];
   const result = new Map();
-  for (const file of files)
-    result.set(
-      file,
-      createHash("sha256")
-        .update(await readFile(resolve(root, "fixtures/capsules", file)))
-        .digest("hex"),
-    );
+  for (const [directory, extension] of targets) {
+    const files = (await readdir(resolve(root, "fixtures", directory)))
+      .filter((value) => value.endsWith(extension))
+      .sort();
+    for (const file of files)
+      result.set(
+        `${directory}/${file}`,
+        createHash("sha256")
+          .update(await readFile(resolve(root, "fixtures", directory, file)))
+          .digest("hex"),
+      );
+  }
   return result;
 }
 const contractPath = resolve(root, "fixtures/expected-results.json");

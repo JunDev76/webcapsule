@@ -1,6 +1,6 @@
 # Android support
 
-The M3 Android runtime targets API 26 and newer and compiles against Android SDK 35. The host application owns `targetSdk`.
+The Android runtime targets API 26 and newer and compiles against Android SDK 35. The host application owns `targetSdk`. Signed remote update installation is documented in [`android-updates.md`](android-updates.md).
 
 ## React Native architecture
 

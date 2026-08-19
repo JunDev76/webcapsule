@@ -54,6 +54,13 @@ export enum WebCapsuleErrorCode {
   ReadyMessageInvalid = "READY_MESSAGE_INVALID",
   ReadyTimeout = "READY_TIMEOUT",
   StabilizationFailed = "STABILIZATION_FAILED",
+  NetworkFailed = "NETWORK_FAILED",
+  NetworkTimeout = "NETWORK_TIMEOUT",
+  HttpStatusInvalid = "HTTP_STATUS_INVALID",
+  ContentLengthMismatch = "CONTENT_LENGTH_MISMATCH",
+  UpdateInProgress = "UPDATE_IN_PROGRESS",
+  UpdateTrialInProgress = "UPDATE_TRIAL_IN_PROGRESS",
+  UpdateStateChanged = "UPDATE_STATE_CHANGED",
 }
 
 export class WebCapsuleFormatError extends Error {

@@ -438,6 +438,214 @@
         "trustedPublicKey": "keys/test-only-public.pem"
       },
       "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/valid-signed",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/valid-signed.json",
+      "accepted": true,
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/signature-mismatch",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/signature-mismatch.json",
+      "accepted": false,
+      "errorCode": "SIGNATURE_MISMATCH",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "beta",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/duplicate-key",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/duplicate-key.json",
+      "accepted": false,
+      "errorCode": "DUPLICATE_JSON_KEY",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/wrong-id",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/wrong-id.json",
+      "accepted": false,
+      "errorCode": "INVALID_UPDATE_INDEX",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/wrong-channel",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/wrong-channel.json",
+      "accepted": false,
+      "errorCode": "INVALID_UPDATE_INDEX",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/unknown-key",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/unknown-key.json",
+      "accepted": false,
+      "errorCode": "KEY_ID_MISMATCH",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "unknown",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/http-url",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/http-url.json",
+      "accepted": false,
+      "errorCode": "INVALID_URL",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/userinfo-url",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/userinfo-url.json",
+      "accepted": false,
+      "errorCode": "INVALID_URL",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/fragment-url",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/fragment-url.json",
+      "accepted": false,
+      "errorCode": "INVALID_URL",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/explicit-port-url",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/explicit-port-url.json",
+      "accepted": false,
+      "errorCode": "INVALID_URL",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/unsorted",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/unsorted.json",
+      "accepted": false,
+      "errorCode": "INVALID_ORDER",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/equivalent-semver",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/equivalent-semver.json",
+      "accepted": false,
+      "errorCode": "INVALID_ORDER",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/malformed-signature",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/malformed-signature.json",
+      "accepted": false,
+      "errorCode": "INVALID_SIGNATURE",
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
+    },
+    {
+      "id": "update-index-v1/runtime-incompatible-valid-signature",
+      "kind": "signed-update-index",
+      "path": "update-index-v1/runtime-incompatible-valid-signature.json",
+      "accepted": true,
+      "verification": {
+        "expectedCapsuleId": "com.example.android.e2e",
+        "expectedChannel": "stable",
+        "expectedKeyId": "test-only",
+        "trustedPublicKey": "keys/test-only-public.pem",
+        "runtimeVersion": "1.0.0"
+      },
+      "platforms": ["typescript", "android"]
     }
   ]
 }

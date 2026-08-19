@@ -42,6 +42,7 @@ describe("shared fixture contract", () => {
       expect([
         "manifest",
         "update-index",
+        "signed-update-index",
         "path",
         "archive",
         "capsule",
@@ -58,22 +59,24 @@ describe("shared fixture contract", () => {
     }
   });
 
-  it.each(contract.fixtures.filter((fixture) => fixture.kind !== "capsule"))(
-    "matches $id",
-    async (fixture) => {
-      const run = async () => {
-        if (fixture.value !== undefined) return assertSafePath(fixture.value);
-        if (fixture.path === undefined) throw new Error("fixture has no input");
-        const text = await readFile(resolve(fixtureRoot, fixture.path), "utf8");
-        return fixture.id.includes("update-index")
-          ? parseUpdateIndexJson(text)
-          : parseCapsuleManifestJson(text);
-      };
-      if (fixture.accepted) await expect(run()).resolves.toBeDefined();
-      else
-        await expect(run()).rejects.toMatchObject({
-          code: fixture.errorCode as WebCapsuleErrorCode,
-        });
-    },
-  );
+  it.each(
+    contract.fixtures.filter(
+      (fixture) =>
+        fixture.kind !== "capsule" && fixture.kind !== "signed-update-index",
+    ),
+  )("matches $id", async (fixture) => {
+    const run = async () => {
+      if (fixture.value !== undefined) return assertSafePath(fixture.value);
+      if (fixture.path === undefined) throw new Error("fixture has no input");
+      const text = await readFile(resolve(fixtureRoot, fixture.path), "utf8");
+      return fixture.id.includes("update-index")
+        ? parseUpdateIndexJson(text)
+        : parseCapsuleManifestJson(text);
+    };
+    if (fixture.accepted) await expect(run()).resolves.toBeDefined();
+    else
+      await expect(run()).rejects.toMatchObject({
+        code: fixture.errorCode as WebCapsuleErrorCode,
+      });
+  });
 });

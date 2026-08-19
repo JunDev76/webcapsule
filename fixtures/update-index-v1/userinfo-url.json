@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "capsuleId": "com.example.android.e2e",
+  "channel": "stable",
+  "releases": [
+    {
+      "version": "2.0.0",
+      "url": "https://u@example.com/x",
+      "sha256": "8268b9e51bea9ae32be586e394d68f59ccfd7ad73fdad8a26040bd776ead85a2",
+      "size": 2044,
+      "minimumRuntimeVersion": "1.0.0"
+    }
+  ],
+  "keyId": "test-only",
+  "signature": "spVzz8+B9TeyH29/K3yYOMDcukfqXzIg6beYAFyONE3ZsqOhzoBmiGOShyAQDmWcPWCJSOdnZHpD1t67DwysCQ=="
+}
