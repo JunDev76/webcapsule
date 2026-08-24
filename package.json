@@ -15,6 +15,7 @@
     "android:assemble": "packages/react-native-webcapsule/android/gradlew -p packages/react-native-webcapsule/android assembleRelease",
     "android:connected": "packages/react-native-webcapsule/android/gradlew -p packages/react-native-webcapsule/android connectedDebugAndroidTest",
     "android:package-check": "pnpm --filter @webcapsule/react-native test -- package-boundary",
+    "ios:test": "pnpm --filter @webcapsule/react-native ios:test",
     "test:android": "pnpm android:test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
