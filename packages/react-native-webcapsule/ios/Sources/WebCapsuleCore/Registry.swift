@@ -296,6 +296,35 @@ final class RegistryManager {
         return next
     }
 
+    func registerPendingUpdateLocked(
+        _ expected: CapsuleRegistry,
+        record: VersionRecord
+    ) throws -> CapsuleRegistry {
+        try compareAndSwapLocked(
+            capsuleId: expected.capsuleId,
+            expectedGeneration: expected.generation
+        ) { current in
+            guard current == expected,
+                  current.active.healthy,
+                  current.pending == nil,
+                  record.capsuleId == current.capsuleId,
+                  record.version != current.active.version,
+                  try SemanticVersion.compare(record.version, current.highestSeenVersion) == .orderedDescending else {
+                throw WebCapsuleError(code: .updateStateChanged, message: "Registry changed before update activation")
+            }
+            return CapsuleRegistry(
+                schemaVersion: 1,
+                capsuleId: current.capsuleId,
+                generation: current.generation + 1,
+                active: ActiveVersion(version: record.version, healthy: false),
+                previous: PreviousVersion(version: current.active.version),
+                pending: PendingVersion(version: record.version, attempts: 0),
+                highestSeenVersion: record.version,
+                blockedVersions: current.blockedVersions
+            )
+        }
+    }
+
     func incrementPendingAttemptLocked(_ expected: CapsuleRegistry) throws -> CapsuleRegistry {
         guard let pending = expected.pending,
               !expected.active.healthy,

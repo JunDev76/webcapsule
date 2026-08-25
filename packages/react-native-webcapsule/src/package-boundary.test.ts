@@ -55,4 +55,39 @@ describe("React Native package boundary", () => {
       expect(swift).toContain(`var ${event}: RCTDirectEventBlock?`);
     }
   });
+
+  it("keeps iOS native modules registered with the Swift-only entrypoint", async () => {
+    const [view, modules] = await Promise.all([
+      readFile(
+        resolve(
+          root,
+          "ios/Sources/WebCapsuleCore/ReactNativeWebCapsuleView.swift",
+        ),
+        "utf8",
+      ),
+      readFile(
+        resolve(
+          root,
+          "ios/Sources/WebCapsuleCore/ReactNativeWebCapsuleUpdateModules.swift",
+        ),
+        "utf8",
+      ),
+    ]);
+    for (const [name, className, method] of [
+      [
+        "WebCapsuleUpdate",
+        "WebCapsuleUpdateModuleIOS",
+        "installWebCapsuleUpdate",
+      ],
+      [
+        "WebCapsuleState",
+        "WebCapsuleStateModuleIOS",
+        "getWebCapsuleRuntimeState",
+      ],
+    ]) {
+      expect(modules).toContain(`@objc(${name})`);
+      expect(modules).toContain(`@objc func ${method}`);
+      expect(view).toContain(`registerReactModule(${className}.self)`);
+    }
+  });
 });

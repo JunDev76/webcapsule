@@ -22,6 +22,7 @@ struct SignedManifestVerification {
 /// Archive structure, content hashes, installation, and activation remain unverified.
 public enum SignedManifestVerifier {
     private static let signatureDomain = Data("WEBCAPSULE-MANIFEST-V1\n".utf8)
+    private static let updateIndexSignatureDomain = Data("WEBCAPSULE-UPDATE-INDEX-V1\n".utf8)
     private static let publicKeyPrefix = Data([
         0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00,
     ])
@@ -83,6 +84,22 @@ public enum SignedManifestVerifier {
             throw WebCapsuleError(code: .signatureMismatch, message: "Manifest signature verification failed")
         }
         return SignedManifestVerification(manifest: manifest, canonicalManifest: canonicalManifest)
+    }
+
+    static func verifyUpdateIndex(
+        canonicalIndex: Data,
+        signature: Data,
+        keyId: String,
+        publicKeys: [String: String]
+    ) throws {
+        guard signature.count == 64 else { throw invalidSignature() }
+        guard let pem = publicKeys[keyId] else {
+            throw WebCapsuleError(code: .keyIDMismatch, message: "No exact trusted update key ID")
+        }
+        let publicKey = try parsePublicKey(pem)
+        guard publicKey.isValidSignature(signature, for: updateIndexSignatureDomain + canonicalIndex) else {
+            throw WebCapsuleError(code: .signatureMismatch, message: "Update index signature verification failed")
+        }
     }
 
     private static func parseSignature(_ data: Data) throws -> Data {

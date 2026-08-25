@@ -100,9 +100,9 @@ export const WebCapsuleView: HostComponent<WebCapsuleViewProps> =
 export async function installWebCapsuleUpdate(
   options: InstallWebCapsuleUpdateOptions,
 ): Promise<InstallWebCapsuleUpdateResult> {
-  if (Platform.OS !== "android") {
+  if (Platform.OS !== "android" && Platform.OS !== "ios") {
     throw new Error(
-      "WEBCAPSULE_ANDROID_ONLY: updates are supported only on Android",
+      "WEBCAPSULE_UNSUPPORTED_PLATFORM: updates are supported only on Android and iOS",
     );
   }
   validateOptions(options);
@@ -119,9 +119,9 @@ export async function installWebCapsuleUpdate(
 export async function getWebCapsuleRuntimeState(
   options: GetWebCapsuleRuntimeStateOptions,
 ): Promise<WebCapsuleRuntimeState> {
-  if (Platform.OS !== "android")
+  if (Platform.OS !== "android" && Platform.OS !== "ios")
     throw new Error(
-      "WEBCAPSULE_ANDROID_ONLY: runtime state is supported only on Android",
+      "WEBCAPSULE_UNSUPPORTED_PLATFORM: runtime state is supported only on Android and iOS",
     );
   validateBaseOptions(options);
   const module = NativeModules.WebCapsuleState as NativeStateModule | undefined;

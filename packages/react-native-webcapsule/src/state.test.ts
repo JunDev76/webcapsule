@@ -55,13 +55,21 @@ describe("getWebCapsuleRuntimeState", () => {
     ).rejects.toThrow("option fields");
   });
 
+  it("forwards exact options on iOS", async () => {
+    reactNative.Platform.OS = "ios";
+    nativeState.mockResolvedValue(state);
+    const { getWebCapsuleRuntimeState } = await import("./index.js");
+    await expect(getWebCapsuleRuntimeState(options)).resolves.toEqual(state);
+    expect(nativeState).toHaveBeenCalledWith(options);
+  });
+
   it("rejects unsupported platform and missing module", async () => {
     const { getWebCapsuleRuntimeState } = await import("./index.js");
-    reactNative.Platform.OS = "ios";
+    reactNative.Platform.OS = "web";
     await expect(getWebCapsuleRuntimeState(options)).rejects.toThrow(
-      "WEBCAPSULE_ANDROID_ONLY",
+      "WEBCAPSULE_UNSUPPORTED_PLATFORM",
     );
-    reactNative.Platform.OS = "android";
+    reactNative.Platform.OS = "ios";
     // @ts-expect-error exercising missing linkage
     reactNative.NativeModules.WebCapsuleState = undefined;
     await expect(getWebCapsuleRuntimeState(options)).rejects.toThrow(

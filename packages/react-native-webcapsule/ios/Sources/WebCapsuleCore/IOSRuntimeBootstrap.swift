@@ -204,6 +204,65 @@ public final class IOSRuntimeBootstrap: @unchecked Sendable {
         }
     }
 
+    /// Performs bundled-only recovery and exhausted-trial reconciliation without
+    /// selecting a session or consuming a pending attempt.
+    public func ensureState(
+        bundledArchiveURL: URL,
+        request: CapsuleVerificationRequest
+    ) throws -> CapsuleRegistry {
+        try SignedManifestVerifier.validate(request.manifestRequestForRuntime)
+        return try storage.withExclusiveLock(capsuleId: request.expectedCapsuleId) {
+            let recovered = try recoverLocked(bundledArchiveURL: bundledArchiveURL, request: request)
+            return try reconcileExhaustedLocked(
+                recovered,
+                bundledArchiveURL: bundledArchiveURL,
+                request: request
+            )
+        }
+    }
+
+    func prepareUpdateSnapshot(
+        bundledArchiveURL: URL,
+        request: CapsuleVerificationRequest
+    ) throws -> CapsuleRegistry {
+        try SignedManifestVerifier.validate(request.manifestRequestForRuntime)
+        return try storage.withExclusiveLock(capsuleId: request.expectedCapsuleId) {
+            let registry = try recoverLocked(bundledArchiveURL: bundledArchiveURL, request: request)
+            guard registry.active.healthy, registry.pending == nil else {
+                throw WebCapsuleError(code: .updateTrialInProgress, message: "A pending trial already exists")
+            }
+            return registry
+        }
+    }
+
+    func verifyAndInstallPendingUpdate(
+        expected: CapsuleRegistry,
+        archiveURL: URL,
+        expectedVersion: String,
+        bundledArchiveURL: URL,
+        request: CapsuleVerificationRequest
+    ) throws -> CapsuleRegistry {
+        try storage.withExclusiveLock(capsuleId: expected.capsuleId) {
+            let current = try recoverLocked(bundledArchiveURL: bundledArchiveURL, request: request)
+            guard current == expected,
+                  current.active.healthy,
+                  current.pending == nil else {
+                throw WebCapsuleError(code: .updateStateChanged, message: "Registry changed while downloading update")
+            }
+            let verified = try verifier.verify(
+                archiveURL: archiveURL,
+                stagingRootURL: storage.stagingURL,
+                request: request
+            )
+            guard verified.manifest.capsuleId == current.capsuleId,
+                  verified.manifest.version == expectedVersion else {
+                throw WebCapsuleError(code: .invalidUpdateIndex, message: "Downloaded capsule identity differs from release")
+            }
+            let installed = try storage.install(verified).record
+            return try registries.registerPendingUpdateLocked(current, record: installed)
+        }
+    }
+
     func readRegistry(capsuleId: String) throws -> CapsuleRegistry? {
         try storage.withExclusiveLock(capsuleId: capsuleId) {
             try registries.readLocked(capsuleId: capsuleId)

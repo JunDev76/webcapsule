@@ -308,6 +308,8 @@ private func registerReactModule(_ moduleClass: AnyClass)
 @_cdecl("WebCapsuleRegisterReactNativeModule")
 public func WebCapsuleRegisterReactNativeModule() {
     registerReactModule(WebCapsuleViewManager.self)
+    registerReactModule(WebCapsuleUpdateModuleIOS.self)
+    registerReactModule(WebCapsuleStateModuleIOS.self)
 }
 
 #if compiler(>=6.2)

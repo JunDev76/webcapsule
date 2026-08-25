@@ -54,13 +54,27 @@ describe("installWebCapsuleUpdate", () => {
     await expect(installWebCapsuleUpdate(options)).resolves.toEqual(result);
   });
 
-  it("rejects non-Android and missing native module", async () => {
-    const { installWebCapsuleUpdate } = await import("./index.js");
+  it("forwards exact options on iOS", async () => {
+    const result = {
+      status: "up-to-date",
+      currentVersion: "1.0.0",
+      highestSeenVersion: "1.0.0",
+      generation: "2",
+    };
     reactNative.Platform.OS = "ios";
+    nativeInstall.mockResolvedValue(result);
+    const { installWebCapsuleUpdate } = await import("./index.js");
+    await expect(installWebCapsuleUpdate(options)).resolves.toEqual(result);
+    expect(nativeInstall).toHaveBeenCalledWith(options);
+  });
+
+  it("rejects unsupported platforms and missing native module", async () => {
+    const { installWebCapsuleUpdate } = await import("./index.js");
+    reactNative.Platform.OS = "web";
     await expect(installWebCapsuleUpdate(options)).rejects.toThrow(
-      "WEBCAPSULE_ANDROID_ONLY",
+      "WEBCAPSULE_UNSUPPORTED_PLATFORM",
     );
-    reactNative.Platform.OS = "android";
+    reactNative.Platform.OS = "ios";
     // @ts-expect-error exercising a missing native module
     reactNative.NativeModules.WebCapsuleUpdate = undefined;
     await expect(installWebCapsuleUpdate(options)).rejects.toThrow(
