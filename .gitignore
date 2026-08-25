@@ -22,3 +22,5 @@ Thumbs.db
 
 # AI 에이전트 비공개 작업 지침 (백데이팅 규칙 등 미공개)
 AGENTS.md
+
+**/.build/

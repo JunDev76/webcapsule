@@ -15,6 +15,8 @@ describe("React Native package boundary", () => {
       "android/gradle.properties",
       "android/src/main",
       "dist",
+      "ios/Sources/WebCapsuleCore",
+      "react-native-webcapsule.podspec",
       "react-native.config.js",
     ]);
     const paths = await readdir(root, { recursive: true });

@@ -15,12 +15,15 @@
     "android/gradle.properties",
     "android/src/main",
     "dist",
+    "ios/Sources/WebCapsuleCore",
+    "react-native-webcapsule.podspec",
     "react-native.config.js"
   ],
   "scripts": {
     "android:compile": "android/gradlew -p android compileDebugKotlin",
     "android:test": "android/gradlew -p android testDebugUnitTest",
     "android:assemble": "android/gradlew -p android assembleRelease",
+    "ios:test": "swift test --package-path ios",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
