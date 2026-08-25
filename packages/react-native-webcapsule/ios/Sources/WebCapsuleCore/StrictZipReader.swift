@@ -1,3 +1,4 @@
+import CryptoKit
 import Darwin
 import Foundation
 import zlib
@@ -18,9 +19,16 @@ struct StrictZipEntry: Equatable {
     fileprivate let ownerID: UUID
 }
 
+struct StrictZipFileIdentity: Equatable {
+    let device: dev_t
+    let inode: ino_t
+}
+
 struct StrictZipExtractionResult: Equatable {
     let size: UInt64
     let crc32: UInt32
+    let sha256: String
+    let fileIdentity: StrictZipFileIdentity?
 }
 
 final class StrictZipReader {
@@ -101,23 +109,67 @@ final class StrictZipReader {
         guard UInt64(entry.uncompressedSize) <= maximumSize else {
             throw WebCapsuleError(code: .limitExceeded, message: "ZIP entry exceeds its extraction limit")
         }
-
-        let descriptor = Darwin.open(outputURL.path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)
+        let descriptor = Darwin.open(outputURL.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else {
             throw WebCapsuleError(code: .storageIOFailed, message: "Extraction target cannot be created")
+        }
+        return try extract(entry, descriptor: descriptor, maximumSize: maximumSize) {
+            unlinkIfSameFile(outputURL.path, attributes: $0)
+        }
+    }
+
+    func extract(
+        _ entry: StrictZipEntry,
+        toDirectoryDescriptor directoryDescriptor: Int32,
+        fileName: String,
+        maximumSize: UInt64
+    ) throws -> StrictZipExtractionResult {
+        try requireOwned(entry)
+        guard !fileName.isEmpty,
+              fileName.utf8.allSatisfy({
+                  (0x30...0x39).contains($0) || (0x61...0x7A).contains($0) || $0 == 0x2E || $0 == 0x2D
+              }) else {
+            throw WebCapsuleError(code: .invalidArgument, message: "Extraction file name is invalid")
+        }
+        guard UInt64(entry.uncompressedSize) <= maximumSize else {
+            throw WebCapsuleError(code: .limitExceeded, message: "ZIP entry exceeds its extraction limit")
+        }
+        let descriptor = Darwin.openat(
+            directoryDescriptor,
+            fileName,
+            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+            S_IRUSR | S_IWUSR
+        )
+        guard descriptor >= 0 else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Extraction target cannot be created")
+        }
+        return try extract(entry, descriptor: descriptor, maximumSize: maximumSize) { attributes in
+            unlinkAtIfSameFile(directoryDescriptor, fileName: fileName, attributes: attributes)
+        }
+    }
+
+    private func extract(
+        _ entry: StrictZipEntry,
+        descriptor: Int32,
+        maximumSize: UInt64,
+        cleanup: (stat) -> Void
+    ) throws -> StrictZipExtractionResult {
+        guard UInt64(entry.uncompressedSize) <= maximumSize else {
+            Darwin.close(descriptor)
+            throw WebCapsuleError(code: .limitExceeded, message: "ZIP entry exceeds its extraction limit")
         }
         let output = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         var createdAttributes = stat()
         guard Darwin.fstat(descriptor, &createdAttributes) == 0 else {
             try? output.close()
-            _ = Darwin.unlink(outputURL.path)
+            cleanup(createdAttributes)
             throw WebCapsuleError(code: .storageIOFailed, message: "Extraction target cannot be inspected")
         }
         var completed = false
         defer {
             try? output.close()
             if !completed {
-                unlinkIfSameFile(outputURL.path, attributes: createdAttributes)
+                cleanup(createdAttributes)
             }
         }
         do {
@@ -126,7 +178,15 @@ final class StrictZipReader {
             }
             try output.synchronize()
             completed = true
-            return observed
+            return StrictZipExtractionResult(
+                size: observed.size,
+                crc32: observed.crc32,
+                sha256: observed.sha256,
+                fileIdentity: StrictZipFileIdentity(
+                    device: createdAttributes.st_dev,
+                    inode: createdAttributes.st_ino
+                )
+            )
         } catch let error as WebCapsuleError {
             throw error
         } catch {
@@ -160,6 +220,7 @@ final class StrictZipReader {
         var compressedRemaining = UInt64(entry.compressedSize)
         var observedSize: UInt64 = 0
         var crc = CRC32()
+        var sha256 = SHA256()
         var reachedEnd = false
         var outputBuffer = [UInt8](repeating: 0, count: 64 * 1024)
 
@@ -193,6 +254,7 @@ final class StrictZipReader {
                         try outputBuffer.withUnsafeBytes { bytes in
                             let producedBytes = UnsafeRawBufferPointer(rebasing: bytes[..<produced])
                             crc.update(producedBytes)
+                            sha256.update(data: producedBytes)
                             try sink(producedBytes)
                         }
                     }
@@ -217,7 +279,12 @@ final class StrictZipReader {
               crc.value == entry.crc32 else {
             throw WebCapsuleError(code: .archiveInvalid, message: "ZIP entry size or CRC does not match")
         }
-        return StrictZipExtractionResult(size: observedSize, crc32: crc.value)
+        return StrictZipExtractionResult(
+            size: observedSize,
+            crc32: crc.value,
+            sha256: sha256.finalize().map { String(format: "%02x", $0) }.joined(),
+            fileIdentity: nil
+        )
     }
 
     private static func parse(
@@ -486,6 +553,16 @@ private func unlinkIfSameFile(_ path: String, attributes: stat) {
         return
     }
     _ = Darwin.unlink(path)
+}
+
+private func unlinkAtIfSameFile(_ directoryDescriptor: Int32, fileName: String, attributes: stat) {
+    var current = stat()
+    guard Darwin.fstatat(directoryDescriptor, fileName, &current, AT_SYMLINK_NOFOLLOW) == 0,
+          current.st_dev == attributes.st_dev,
+          current.st_ino == attributes.st_ino else {
+        return
+    }
+    _ = Darwin.unlinkat(directoryDescriptor, fileName, 0)
 }
 
 private struct CRC32 {

@@ -49,7 +49,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "android-e2e-v1",
@@ -98,7 +98,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "content-hash-mismatch",
@@ -111,7 +111,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "duplicate-nested-json-key",
@@ -124,7 +124,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "noncanonical-manifest",
@@ -137,7 +137,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "unknown-content",
@@ -150,7 +150,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "missing-content",
@@ -163,7 +163,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "malformed-signature",
@@ -176,7 +176,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "id-mismatch",
@@ -189,7 +189,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "key-id-absent",
@@ -203,7 +203,7 @@
         "trustedPublicKey": "keys/test-only-public.pem",
         "trustedKeyId": "other"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "runtime-incompatible",
@@ -216,7 +216,7 @@
         "runtimeVersion": "0.9.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "local-central-filename-mismatch",
@@ -229,7 +229,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "raw-backslash",
@@ -242,7 +242,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "path-traversal",
@@ -255,7 +255,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "ascii-case-collision",
@@ -268,7 +268,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "non-nfc",
@@ -281,7 +281,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "encrypted-bit",
@@ -294,7 +294,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "unsupported-flags",
@@ -307,7 +307,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "archive-comment",
@@ -320,7 +320,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "entry-comment",
@@ -333,7 +333,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "central-extra",
@@ -346,7 +346,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "local-extra",
@@ -359,7 +359,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "wrong-mode",
@@ -372,7 +372,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "nonunix-mode",
@@ -385,7 +385,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "symlink-mode",
@@ -398,7 +398,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "fifo-mode",
@@ -411,7 +411,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "store-method",
@@ -424,7 +424,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "timestamp-mismatch",
@@ -437,7 +437,7 @@
         "runtimeVersion": "1.0.0",
         "trustedPublicKey": "keys/test-only-public.pem"
       },
-      "platforms": ["typescript", "android"]
+      "platforms": ["typescript", "android", "ios"]
     },
     {
       "id": "update-index-v1/valid-signed",

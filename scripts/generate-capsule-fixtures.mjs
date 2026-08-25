@@ -54,7 +54,7 @@ function add(id, bytes, errorCode, verification = {}) {
       trustedPublicKey: "keys/test-only-public.pem",
       ...verification,
     },
-    platforms: ["typescript", "android"],
+    platforms: ["typescript", "android", "ios"],
   });
   return writeFile(join(out, `${id}.capsule`), bytes);
 }

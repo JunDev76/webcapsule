@@ -13,6 +13,11 @@ public struct ManifestVerificationRequest: Equatable, Sendable {
     }
 }
 
+struct SignedManifestVerification {
+    let manifest: CapsuleManifest
+    let canonicalManifest: Data
+}
+
 /// Verifies only the authenticity and host compatibility of `capsule.json`.
 /// Archive structure, content hashes, installation, and activation remain unverified.
 public enum SignedManifestVerifier {
@@ -26,6 +31,15 @@ public enum SignedManifestVerifier {
         signatureData: Data,
         request: ManifestVerificationRequest
     ) throws -> CapsuleManifest {
+        try validate(request)
+        return try verifyValidated(
+            manifestData: manifestData,
+            signatureData: signatureData,
+            request: request
+        ).manifest
+    }
+
+    static func validate(_ request: ManifestVerificationRequest) throws {
         try CapsuleManifestParser.validateCapsuleID(request.expectedCapsuleId)
         try SemanticVersion.validate(request.runtimeVersion)
         guard !request.publicKeys.isEmpty else {
@@ -37,12 +51,19 @@ public enum SignedManifestVerifier {
                 throw WebCapsuleError(code: .invalidPublicKey, message: "Public key must not be empty")
             }
         }
+    }
 
-        let manifest = try CapsuleManifestParser.parse(manifestData)
+    static func verifyValidated(
+        manifestData: Data,
+        signatureData: Data,
+        request: ManifestVerificationRequest
+    ) throws -> SignedManifestVerification {
         let parsedJSON = try StrictJSON.parse(manifestData)
-        var canonicalManifest = CanonicalJSON.serialize(parsedJSON)
-        canonicalManifest.append(0x0A)
-        guard canonicalManifest == manifestData else {
+        let manifest = try CapsuleManifestParser.parse(parsedJSON)
+        let canonicalManifest = CanonicalJSON.serialize(parsedJSON)
+        var storedManifest = canonicalManifest
+        storedManifest.append(0x0A)
+        guard storedManifest == manifestData else {
             throw WebCapsuleError(code: .invalidManifest, message: "capsule.json is not canonical with one final LF")
         }
 
@@ -57,11 +78,11 @@ public enum SignedManifestVerifier {
             throw WebCapsuleError(code: .keyIDMismatch, message: "No trusted key exists for the manifest key ID")
         }
         let publicKey = try parsePublicKey(pem)
-        let payload = signatureDomain + canonicalManifest.dropLast()
+        let payload = signatureDomain + canonicalManifest
         guard publicKey.isValidSignature(signature, for: payload) else {
             throw WebCapsuleError(code: .signatureMismatch, message: "Manifest signature verification failed")
         }
-        return manifest
+        return SignedManifestVerification(manifest: manifest, canonicalManifest: canonicalManifest)
     }
 
     private static func parseSignature(_ data: Data) throws -> Data {

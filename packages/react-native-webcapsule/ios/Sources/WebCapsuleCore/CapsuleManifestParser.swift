@@ -5,7 +5,11 @@ public enum CapsuleManifestParser {
     private static let maximumExpandedSize: Int64 = 250 * 1024 * 1024
 
     public static func parse(_ data: Data) throws -> CapsuleManifest {
-        let root = try StrictJSON.parse(data).object("manifest")
+        try parse(StrictJSON.parse(data))
+    }
+
+    static func parse(_ value: StrictJSONValue) throws -> CapsuleManifest {
+        let root = try value.object("manifest")
         try root.requireExactly([
             "formatVersion", "capsuleId", "version", "entry", "createdAt",
             "minimumRuntimeVersion", "keyId", "files", "policy",
