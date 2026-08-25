@@ -146,7 +146,7 @@ public enum CapsuleManifestParser {
         return result
     }
 
-    private static func validateCapsuleID(_ value: String) throws {
+    static func validateCapsuleID(_ value: String) throws {
         let bytes = Array(value.utf8)
         var hasSeparator = false
         var segmentLength = 0
@@ -166,7 +166,7 @@ public enum CapsuleManifestParser {
         }
     }
 
-    private static func validateKeyID(_ value: String) throws {
+    static func validateKeyID(_ value: String) throws {
         let bytes = Array(value.utf8)
         guard (1...128).contains(bytes.count), isASCIIAlphaNumeric(bytes[0]), bytes.dropFirst().allSatisfy({
             isASCIIAlphaNumeric($0) || $0 == 0x2E || $0 == 0x5F || $0 == 0x2D
