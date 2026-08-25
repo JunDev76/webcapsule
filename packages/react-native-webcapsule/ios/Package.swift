@@ -6,7 +6,10 @@ let package = Package(
     platforms: [.iOS(.v15), .macOS(.v12)],
     products: [.library(name: "WebCapsuleCore", targets: ["WebCapsuleCore"])],
     targets: [
-        .target(name: "WebCapsuleCore"),
+        .target(
+            name: "WebCapsuleCore",
+            linkerSettings: [.linkedLibrary("z")]
+        ),
         .testTarget(name: "WebCapsuleCoreTests", dependencies: ["WebCapsuleCore"]),
     ]
 )

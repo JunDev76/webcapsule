@@ -12,5 +12,6 @@ Pod::Spec.new do |s|
   s.platform = :ios, "15.1"
   s.source = { :git => "https://github.com/JunDev76/webcapsule.git", :tag => s.version.to_s }
   s.source_files = "ios/Sources/WebCapsuleCore/**/*.swift"
+  s.libraries = "z"
   s.swift_version = "5.9"
 end
