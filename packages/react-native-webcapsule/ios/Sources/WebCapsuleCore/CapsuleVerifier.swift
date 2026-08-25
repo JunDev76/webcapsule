@@ -54,7 +54,7 @@ public struct VerifiedCapsuleFile: Equatable, Sendable {
     public let sha256: String
     public let size: Int64
     public let mediaType: String
-    public let stagedURL: URL
+    let stagedURL: URL
 
     init(path: String, sha256: String, size: Int64, mediaType: String, stagedURL: URL) {
         self.path = path
@@ -66,27 +66,59 @@ public struct VerifiedCapsuleFile: Equatable, Sendable {
 }
 
 /// A transient, fully verified capsule. This is not a durable installation.
-/// The caller owns `operationDirectory` after success and must remove it when
-/// installation finishes or is abandoned.
-public struct VerifiedCapsule: Equatable, Sendable {
+/// It is a single-consumption capability: `CapsuleInstaller` consumes it and
+/// safely removes only verifier-owned staging inodes. Abandoned instances clean
+/// their staging when deallocated.
+public final class VerifiedCapsule: @unchecked Sendable {
     public let manifest: CapsuleManifest
     public let canonicalManifest: Data
     public let manifestSHA256: String
     public let files: [VerifiedCapsuleFile]
-    public let operationDirectory: URL
+    let operationDirectory: URL
 
-    init(
+    private let ownership: VerifiedCapsuleOwnership
+
+    fileprivate init(
         manifest: CapsuleManifest,
         canonicalManifest: Data,
         manifestSHA256: String,
         files: [VerifiedCapsuleFile],
-        operationDirectory: URL
+        ownership: VerifiedCapsuleOwnership
     ) {
         self.manifest = manifest
         self.canonicalManifest = canonicalManifest
         self.manifestSHA256 = manifestSHA256
         self.files = files
-        self.operationDirectory = operationDirectory
+        operationDirectory = ownership.operation.url
+        self.ownership = ownership
+    }
+
+    func claimForInstall() throws -> OwnedOperationDirectory {
+        try ownership.claim()
+    }
+}
+
+private final class VerifiedCapsuleOwnership: @unchecked Sendable {
+    let operation: OwnedOperationDirectory
+    private let lock = NSLock()
+    private var consumed = false
+
+    init(operation: OwnedOperationDirectory) {
+        self.operation = operation
+    }
+
+    func claim() throws -> OwnedOperationDirectory {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !consumed else {
+            throw WebCapsuleError(code: .storageInvariantViolation, message: "Verified capsule was already consumed")
+        }
+        consumed = true
+        return operation
+    }
+
+    deinit {
+        operation.cleanup()
     }
 }
 
@@ -210,7 +242,7 @@ public final class CapsuleVerifier: Sendable {
             canonicalManifest: signed.canonicalManifest,
             manifestSHA256: manifestDigest,
             files: verifiedFiles,
-            operationDirectory: operation.url
+            ownership: VerifiedCapsuleOwnership(operation: operation)
         )
     }
 
@@ -273,7 +305,7 @@ struct DOSTimestamp {
     }
 }
 
-private final class ExistingDirectory {
+final class ExistingDirectory {
     let descriptor: Int32
     let url: URL
     let attributes: stat
@@ -314,7 +346,7 @@ private final class ExistingDirectory {
     }
 }
 
-private final class OwnedOperationDirectory {
+final class OwnedOperationDirectory {
     let descriptor: Int32
     let url: URL
 
@@ -360,6 +392,15 @@ private final class OwnedOperationDirectory {
         createdFiles.append((fileName, identity))
     }
 
+    func isRecordedRegularFile(_ fileName: String, attributes: stat) -> Bool {
+        createdFiles.contains {
+            $0.name == fileName
+                && $0.identity.device == attributes.st_dev
+                && $0.identity.inode == attributes.st_ino
+                && attributes.st_mode & S_IFMT == S_IFREG
+        }
+    }
+
     func isCurrentAtRoot() -> Bool {
         var current = stat()
         return Darwin.fstatat(rootDescriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0
@@ -375,6 +416,10 @@ private final class OwnedOperationDirectory {
             && currentRoot.st_ino == rootAttributes.st_ino
             && currentRoot.st_mode & S_IFMT == S_IFDIR
             && isCurrentAtRoot()
+    }
+
+    func belongsToRoot(device: dev_t, inode: ino_t) -> Bool {
+        rootAttributes.st_dev == device && rootAttributes.st_ino == inode
     }
 
     func containsOnlyRecordedRegularFiles() -> Bool {
@@ -408,7 +453,7 @@ private final class OwnedOperationDirectory {
     }
 
     private func directoryEntryNames() -> [String]? {
-        let duplicate = Darwin.dup(descriptor)
+        let duplicate = Darwin.openat(descriptor, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         guard duplicate >= 0, let directory = Darwin.fdopendir(duplicate) else {
             if duplicate >= 0 { Darwin.close(duplicate) }
             return nil

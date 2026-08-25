@@ -254,7 +254,7 @@ final class CapsuleVerifierTests: XCTestCase {
         assertSendable(request)
         assertSendable(limits)
         let result = try verify(fixture("valid-minimal"), stagingRoot: temporaryDirectory())
-        XCTAssertEqual(result, result)
+        XCTAssertEqual(result.manifest.capsuleId, "com.example.fixture")
         assertSendable(result)
         try FileManager.default.removeItem(at: result.operationDirectory)
     }
