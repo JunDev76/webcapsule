@@ -25,28 +25,55 @@ final class CapsuleStorage {
     let stagingURL: URL
 
     private let root: StorageDirectory
+    private let blobContainer: StorageDirectory
     private let blobs: StorageDirectory
     private let versions: StorageDirectory
     private let locks: StorageDirectory
     private let stagingIdentity: StrictZipFileIdentity
+    private var pinnedResourceShardIdentities: [String: StrictZipFileIdentity] = [:]
     private let faultInjector: CapsuleInstallFaultInjector
     private let registryFaultInjector: RegistryWriteFaultInjector
 
     init(
         rootURL: URL,
         faultInjector: @escaping CapsuleInstallFaultInjector = { _ in },
-        registryFaultInjector: @escaping RegistryWriteFaultInjector = { _ in }
+        registryFaultInjector: @escaping RegistryWriteFaultInjector = { _ in },
+        createLayout: Bool = true
     ) throws {
         guard rootURL.isFileURL else {
             throw WebCapsuleError(code: .invalidArgument, message: "Storage root must be a file URL")
         }
         root = try StorageDirectory.openExistingRoot(rootURL)
-        let blobsRoot = try root.openOrCreateDirectory("blobs")
-        blobs = try blobsRoot.openOrCreateDirectory("sha256")
-        versions = try root.openOrCreateDirectory("versions")
-        let staging = try root.openOrCreateDirectory("staging")
+        let openedBlobContainer: StorageDirectory
+        let openedBlobs: StorageDirectory
+        let openedVersions: StorageDirectory
+        let staging: StorageDirectory
+        let openedLocks: StorageDirectory
+        if createLayout {
+            openedBlobContainer = try root.openOrCreateDirectory("blobs")
+            openedBlobs = try openedBlobContainer.openOrCreateDirectory("sha256")
+            openedVersions = try root.openOrCreateDirectory("versions")
+            staging = try root.openOrCreateDirectory("staging")
+            openedLocks = try root.openOrCreateDirectory("locks")
+        } else {
+            do {
+                openedBlobContainer = try root.openDirectory("blobs")
+                openedBlobs = try openedBlobContainer.openDirectory("sha256")
+                openedVersions = try root.openDirectory("versions")
+                staging = try root.openDirectory("staging")
+                openedLocks = try root.openDirectory("locks")
+            } catch {
+                throw WebCapsuleError(
+                    code: .storageInvariantViolation,
+                    message: "Pinned resource storage layout is missing or unsafe"
+                )
+            }
+        }
+        blobContainer = openedBlobContainer
+        blobs = openedBlobs
+        versions = openedVersions
         stagingIdentity = staging.identity
-        locks = try root.openOrCreateDirectory("locks")
+        locks = openedLocks
         stagingURL = staging.url
         self.faultInjector = faultInjector
         self.registryFaultInjector = registryFaultInjector
@@ -523,6 +550,84 @@ final class CapsuleStorage {
             conflictingIsInvariant: true
         )
         return CapsuleInstallResult(record: record, installed: true, publishedBlobCount: publishedBlobCount)
+    }
+
+    func pinResourceShards(_ files: [SessionFile]) throws {
+        var pinned: [String: StrictZipFileIdentity] = [:]
+        do {
+            guard root.isReachableAtOriginalURL(),
+                  root.childMatches("blobs", identity: blobContainer.identity),
+                  blobContainer.childMatches("sha256", identity: blobs.identity) else {
+                throw WebCapsuleError(code: .storageInvariantViolation, message: "CAS root identity changed")
+            }
+            for shardName in Set(files.map { String($0.sha256.prefix(2)) }) {
+                let shard = try blobs.openDirectory(shardName)
+                guard blobs.childMatches(shardName, identity: shard.identity) else {
+                    throw WebCapsuleError(code: .storageInvariantViolation, message: "CAS shard identity changed")
+                }
+                pinned[shardName] = shard.identity
+            }
+            pinnedResourceShardIdentities = pinned
+        } catch let error as WebCapsuleError where error.code == .storageInvariantViolation {
+            throw error
+        } catch {
+            throw WebCapsuleError(code: .storageInvariantViolation, message: "Pinned CAS layout cannot be validated")
+        }
+    }
+
+    func openPinnedBlob(_ file: SessionFile) throws -> PinnedBlobStream {
+        do {
+            guard VersionRecordCodec.isLowercaseSHA256(file.sha256),
+                  file.size >= 0,
+                  root.isReachableAtOriginalURL(),
+                  root.childMatches("blobs", identity: blobContainer.identity),
+                  blobContainer.childMatches("sha256", identity: blobs.identity) else {
+                throw WebCapsuleError(code: .storageInvariantViolation, message: "CAS root identity changed")
+            }
+            let shardName = String(file.sha256.prefix(2))
+            guard let pinnedShardIdentity = pinnedResourceShardIdentities[shardName],
+                  blobs.childMatches(shardName, identity: pinnedShardIdentity) else {
+                throw WebCapsuleError(code: .storageInvariantViolation, message: "CAS shard identity changed")
+            }
+            let shard = try blobs.openDirectory(shardName)
+            guard shard.identity == pinnedShardIdentity,
+                  blobs.childMatches(shardName, identity: shard.identity) else {
+                throw WebCapsuleError(code: .storageInvariantViolation, message: "CAS shard identity changed")
+            }
+            let descriptor = Darwin.openat(
+                shard.descriptor,
+                file.sha256,
+                O_RDONLY | O_NOFOLLOW | O_CLOEXEC
+            )
+            guard descriptor >= 0 else {
+                throw WebCapsuleError(code: .storageInvariantViolation, message: "Pinned CAS blob cannot be opened")
+            }
+            var transferOwnership = false
+            defer { if !transferOwnership { Darwin.close(descriptor) } }
+            let attributes = try regularFileAttributes(descriptor, expectedSize: UInt64(file.size))
+            guard attributes.st_uid == Darwin.geteuid(),
+                  attributes.st_nlink >= 1,
+                  attributes.st_mode & 0o777 == S_IRUSR | S_IRGRP | S_IROTH,
+                  shard.pathMatches(file.sha256, descriptor: descriptor),
+                  root.isReachableAtOriginalURL(),
+                  root.childMatches("blobs", identity: blobContainer.identity),
+                  blobContainer.childMatches("sha256", identity: blobs.identity),
+                  blobs.childMatches(shardName, identity: shard.identity),
+                  try hash(descriptor: descriptor) == file.sha256,
+                  Darwin.lseek(descriptor, 0, SEEK_SET) == 0 else {
+                throw WebCapsuleError(code: .storageInvariantViolation, message: "Pinned CAS blob violates immutable storage invariants")
+            }
+            transferOwnership = true
+            return PinnedBlobStream(
+                descriptor: descriptor,
+                expectedSize: file.size,
+                expectedSHA256: file.sha256
+            )
+        } catch let error as WebCapsuleError where error.code == .storageInvariantViolation {
+            throw error
+        } catch {
+            throw WebCapsuleError(code: .storageInvariantViolation, message: "Pinned CAS storage cannot be validated")
+        }
     }
 
     func read(capsuleId: String, version: String) throws -> VersionRecord {

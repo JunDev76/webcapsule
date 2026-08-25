@@ -61,12 +61,23 @@ public enum WebCapsuleErrorCode: String, Sendable {
     case updateStateChanged = "UPDATE_STATE_CHANGED"
 }
 
-public struct WebCapsuleError: Error, Equatable, Sendable {
+public struct WebCapsuleError: Error, Equatable, Sendable, CustomNSError {
+    public static let errorDomain = "dev.webcapsule.runtime"
+
     public let code: WebCapsuleErrorCode
     public let message: String
 
     public init(code: WebCapsuleErrorCode, message: String) {
         self.code = code
         self.message = message
+    }
+
+    public var errorCode: Int { 1 }
+
+    public var errorUserInfo: [String: Any] {
+        [
+            NSLocalizedDescriptionKey: message,
+            "WebCapsuleErrorCode": code.rawValue,
+        ]
     }
 }

@@ -31,6 +31,33 @@ public struct SessionDescriptor: Equatable, Sendable {
 
     private let trialLease: PendingTrialLease?
 
+    init(
+        sessionId: String,
+        capsuleId: String,
+        version: String,
+        entry: String,
+        recordSHA256: String,
+        registryGeneration: Int64,
+        createdMonotonicNanoseconds: UInt64,
+        files: [String: SessionFile],
+        trialVersion: String?,
+        trialAttempt: Int64?
+    ) {
+        self.init(
+            sessionId: sessionId,
+            capsuleId: capsuleId,
+            version: version,
+            entry: entry,
+            recordSHA256: recordSHA256,
+            registryGeneration: registryGeneration,
+            createdMonotonicNanoseconds: createdMonotonicNanoseconds,
+            files: files,
+            trialVersion: trialVersion,
+            trialAttempt: trialAttempt,
+            trialLease: nil
+        )
+    }
+
     fileprivate init(
         sessionId: String,
         capsuleId: String,
