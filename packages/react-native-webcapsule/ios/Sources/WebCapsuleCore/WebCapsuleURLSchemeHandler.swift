@@ -33,17 +33,20 @@ final class PinnedResourceTaskCoordinator: @unchecked Sendable {
     private let resolver: PinnedResourceResolver
     private let workQueue: DispatchQueue
     private let callbackQueue: DispatchQueue
+    private let fatalObserver: @Sendable (WebCapsuleError) -> Void
     private let lock = NSRecursiveLock()
     private var states: [ObjectIdentifier: State] = [:]
 
     init(
         resolver: PinnedResourceResolver,
         workQueue: DispatchQueue = DispatchQueue(label: "dev.webcapsule.resource-stream", qos: .userInitiated),
-        callbackQueue: DispatchQueue = .main
+        callbackQueue: DispatchQueue = .main,
+        fatalObserver: @escaping @Sendable (WebCapsuleError) -> Void = { _ in }
     ) {
         self.resolver = resolver
         self.workQueue = workQueue
         self.callbackQueue = callbackQueue
+        self.fatalObserver = fatalObserver
     }
 
     func start(_ sink: PinnedResourceTaskSink) {
@@ -118,7 +121,11 @@ final class PinnedResourceTaskCoordinator: @unchecked Sendable {
             }
             finish(state, key: key)
         } catch {
-            fail(state, key: key, error: normalize(error))
+            let failure = normalize(error)
+            if failure.code == .storageInvariantViolation || failure.code == .blobMissing {
+                _ = callback(state) { [fatalObserver] _ in fatalObserver(failure) }
+            }
+            fail(state, key: key, error: failure)
         }
     }
 
@@ -230,10 +237,17 @@ public final class WebCapsuleURLSchemeHandler: NSObject, WKURLSchemeHandler {
     private let lock = NSLock()
     private var sinks: [ObjectIdentifier: WebKitResourceTaskSink] = [:]
 
-    public init(storageRootURL: URL, session: SessionDescriptor) throws {
+    public init(
+        storageRootURL: URL,
+        session: SessionDescriptor,
+        fatalObserver: @escaping @Sendable (WebCapsuleError) -> Void = { _ in }
+    ) throws {
         let resolver = try PinnedResourceResolver(storageRootURL: storageRootURL, session: session)
         entryURL = resolver.entryURL
-        coordinator = PinnedResourceTaskCoordinator(resolver: resolver)
+        coordinator = PinnedResourceTaskCoordinator(
+            resolver: resolver,
+            fatalObserver: fatalObserver
+        )
         super.init()
     }
 
@@ -286,9 +300,14 @@ public enum WebCapsuleWebViewConfiguration {
     /// view's responsibility.
     public static func make(
         storageRootURL: URL,
-        session: SessionDescriptor
+        session: SessionDescriptor,
+        fatalObserver: @escaping @Sendable (WebCapsuleError) -> Void = { _ in }
     ) throws -> (configuration: WKWebViewConfiguration, handler: WebCapsuleURLSchemeHandler) {
-        let handler = try WebCapsuleURLSchemeHandler(storageRootURL: storageRootURL, session: session)
+        let handler = try WebCapsuleURLSchemeHandler(
+            storageRootURL: storageRootURL,
+            session: session,
+            fatalObserver: fatalObserver
+        )
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(handler, forURLScheme: PinnedResourceResolver.scheme)
         return (configuration, handler)

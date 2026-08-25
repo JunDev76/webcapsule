@@ -16,6 +16,7 @@ final class WebCapsuleNativeView: UIView {
 
     private var lifecycle: IOSWebCapsuleLifecycleController?
     private var secureView: SecureWebCapsuleWebView?
+    private var health: IOSHealthCoordinator?
     private var viewGeneration: UInt64 = 0
     private var disposed = false
     private var wasMounted = false
@@ -126,46 +127,133 @@ final class WebCapsuleNativeView: UIView {
             return
         }
         detachWebView()
-        SecureWebCapsuleWebViewFactory.make(
+        guard let bundledArchiveURL = prepared.bundledArchiveURL,
+              let verificationRequest = prepared.verificationRequest else {
+            prepared.session.releaseTrial()
+            emitError(WebCapsuleError(code: .rollbackFailed, message: "Trusted bundled rollback source is unavailable"))
+            return
+        }
+        let outcomes: IOSTrialOutcomeCoordinator
+        do {
+            outcomes = try IOSTrialOutcomeCoordinator(
+                storageRootURL: prepared.storageRootURL,
+                bundledArchiveURL: bundledArchiveURL,
+                request: verificationRequest
+            )
+        } catch {
+            prepared.session.releaseTrial()
+            emitError(normalize(error))
+            return
+        }
+        let coordinator = IOSHealthCoordinator(
+            session: prepared.session,
+            entryURL: URL(string: PinnedResourceResolver.urlString(
+                capsuleId: prepared.session.capsuleId,
+                version: prepared.session.version,
+                path: prepared.session.entry
+            ))!,
+            scheduler: DispatchHealthScheduler(),
+            commit: { _ = try outcomes.commitHealthy(prepared.session) },
+            success: { [weak self] in
+                DispatchQueue.main.async {
+                    guard let self, !self.disposed, token == self.viewGeneration else { return }
+                    self.onLoad?([
+                        "capsuleId": prepared.session.capsuleId,
+                        "version": prepared.session.version,
+                    ])
+                }
+            },
+            failure: { [weak self] error in
+                DispatchQueue.main.async {
+                    self?.handleHealthFailure(
+                        error,
+                        prepared: prepared,
+                        outcomes: outcomes,
+                        token: token
+                    )
+                }
+            }
+        )
+        health = coordinator
+        SecureWebCapsuleWebViewFactory.makeWithHealth(
             frame: bounds,
             storageRootURL: prepared.storageRootURL,
-            session: prepared.session
+            session: prepared.session,
+            receiveReady: { [weak coordinator] body, source in
+                coordinator?.ready(body: body, source: source)
+            },
+            fatalObserver: { [weak coordinator] error in
+                coordinator?.fatal(error.message)
+            }
         ) { [weak self] result in
             guard let self, !self.disposed, token == self.viewGeneration else {
-                if case let .success(made) = result { made.handler.invalidate(); made.webView.stopLoading() }
+                if case let .success(made) = result { made.invalidate() }
+                coordinator.close()
+                prepared.session.releaseTrial()
                 return
             }
             switch result {
             case let .failure(error):
-                self.lifecycle?.invalidate()
-                self.lifecycle = nil
-                self.emitError(error)
+                coordinator.preparationFailed(error)
             case let .success(made):
-                made.delegate.didLoadEntry = { [weak self] in
-                    self?.onLoad?(["capsuleId": prepared.session.capsuleId, "version": prepared.session.version])
+                made.delegate.didLoadEntry = { [weak self, weak coordinator] in
+                    guard let self, !self.disposed, token == self.viewGeneration else { return }
+                    coordinator?.entryLoaded()
                 }
-                made.delegate.didFailEntry = { [weak self] error in
-                    guard let self else { return }
-                    self.lifecycle?.invalidate()
-                    self.lifecycle = nil
-                    self.detachWebView()
-                    self.emitError(error)
+                made.delegate.didFailEntry = { [weak coordinator] error in
+                    coordinator?.entryFailed(error.message)
+                }
+                made.delegate.didEncounterFatalFailure = { [weak coordinator] error in
+                    coordinator?.fatal(error.message)
                 }
                 self.secureView = made
                 self.addSubview(made.webView)
                 made.webView.frame = self.bounds
                 guard let navigation = made.webView.load(URLRequest(url: made.handler.entryURL)) else {
-                    self.lifecycle?.invalidate()
-                    self.lifecycle = nil
-                    self.detachWebView()
-                    self.emitError(WebCapsuleError(
-                        code: .entryLoadFailed,
-                        message: "Pinned entry could not start loading"
-                    ))
+                    coordinator.entryFailed("Pinned entry could not start loading")
                     return
                 }
                 made.delegate.trackEntryNavigation(navigation)
             }
+        }
+    }
+
+    private func handleHealthFailure(
+        _ error: WebCapsuleError,
+        prepared: IOSPreparedRuntimeSession,
+        outcomes: IOSTrialOutcomeCoordinator,
+        token: UInt64
+    ) {
+        guard !disposed, token == viewGeneration else { return }
+        // Invalidate in-flight factory/message/timer callbacks before recording
+        // and emitting the single terminal health outcome.
+        viewGeneration &+= 1
+        let outcome: IOSTrialOutcome
+        do {
+            outcome = try outcomes.recordExplicitFailure(prepared.session)
+        } catch {
+            detachWebView()
+            lifecycle?.invalidate()
+            lifecycle = nil
+            emitError(normalize(error))
+            return
+        }
+        detachWebView()
+        lifecycle?.invalidate()
+        lifecycle = nil
+        emitError(error)
+        if let rollback = IOSTrialOutcomeCoordinator.rollbackEvent(
+            session: prepared.session,
+            outcome: outcome,
+            reason: error.code
+        ) {
+            onRollback?([
+                "capsuleId": rollback.capsuleId,
+                "failedVersion": rollback.failedVersion,
+                "restoredVersion": rollback.restoredVersion ?? NSNull(),
+                "reason": rollback.reason,
+                "generation": rollback.generation,
+            ])
         }
     }
 
@@ -177,10 +265,9 @@ final class WebCapsuleNativeView: UIView {
     }
 
     private func detachWebView() {
-        secureView?.webView.stopLoading()
-        secureView?.webView.navigationDelegate = nil
-        secureView?.webView.uiDelegate = nil
-        secureView?.handler.invalidate()
+        health?.close()
+        health = nil
+        secureView?.invalidate()
         secureView?.webView.removeFromSuperview()
         secureView = nil
     }

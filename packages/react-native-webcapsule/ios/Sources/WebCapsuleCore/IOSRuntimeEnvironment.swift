@@ -129,10 +129,19 @@ public enum IOSRuntimeStorageRoot {
 public struct IOSPreparedRuntimeSession: Sendable {
     public let storageRootURL: URL
     public let session: SessionDescriptor
+    let bundledArchiveURL: URL?
+    let verificationRequest: CapsuleVerificationRequest?
 
-    init(storageRootURL: URL, session: SessionDescriptor) {
+    init(
+        storageRootURL: URL,
+        session: SessionDescriptor,
+        bundledArchiveURL: URL? = nil,
+        verificationRequest: CapsuleVerificationRequest? = nil
+    ) {
         self.storageRootURL = storageRootURL
         self.session = session
+        self.bundledArchiveURL = bundledArchiveURL
+        self.verificationRequest = verificationRequest
     }
 }
 
@@ -149,14 +158,20 @@ public enum IOSRuntimePreparer {
         )
         let storage = try IOSRuntimeStorageRoot.prepare(applicationSupportURL: applicationSupportURL)
         let runtime = try IOSRuntimeBootstrap(storageRootURL: storage)
+        let request = CapsuleVerificationRequest(
+            expectedCapsuleId: config.capsuleId,
+            runtimeVersion: config.runtimeVersion,
+            publicKeys: config.publicKeys
+        )
         let session = try runtime.start(
             bundledArchiveURL: archive,
-            request: CapsuleVerificationRequest(
-                expectedCapsuleId: config.capsuleId,
-                runtimeVersion: config.runtimeVersion,
-                publicKeys: config.publicKeys
-            )
+            request: request
         )
-        return IOSPreparedRuntimeSession(storageRootURL: storage, session: session)
+        return IOSPreparedRuntimeSession(
+            storageRootURL: storage,
+            session: session,
+            bundledArchiveURL: archive,
+            verificationRequest: request
+        )
     }
 }

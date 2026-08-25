@@ -412,6 +412,83 @@ final class IOSWebViewSecurityTests: XCTestCase {
         wait(for: [configured], timeout: 10)
     }
 
+    func testReadyBridgeInstallsMainFrameDocumentStartScriptAndRejectsNativeObjects() throws {
+        let installed = try installedEntry()
+        let controller = WKUserContentController()
+        let received = LockedValue<[(String, ReadyMessageSource)]>([])
+        let bridge = WebCapsuleReadyBridge(
+            controller: controller,
+            session: installed.session
+        ) { body, source in
+            received.mutate { $0.append((body, source)) }
+        }
+        XCTAssertEqual(controller.userScripts.count, 1)
+        let script = try XCTUnwrap(controller.userScripts.first)
+        XCTAssertEqual(script.injectionTime, .atDocumentStart)
+        XCTAssertTrue(script.isForMainFrameOnly)
+        XCTAssertEqual(
+            script.source,
+            WebCapsuleReadyBridgeContract.bootstrapScript(session: installed.session)
+        )
+
+        let source = ReadyMessageSource(
+            isMainFrame: true,
+            scheme: "webcapsule",
+            host: installed.session.capsuleId,
+            port: 0,
+            documentURL: URL(string: "webcapsule://com.example.fixture/1.0.0/index.html")
+        )
+        bridge.receive(body: ["type": "ready"], source: source)
+        XCTAssertEqual(received.get().map(\.0), [""])
+        bridge.receive(body: "{\"type\":\"ready\"}", source: source)
+        XCTAssertEqual(received.get().map(\.0), ["", "{\"type\":\"ready\"}"])
+
+        bridge.invalidate()
+        XCTAssertTrue(controller.userScripts.isEmpty)
+        bridge.receive(body: "late", source: source)
+        XCTAssertEqual(received.get().map(\.0), ["", "{\"type\":\"ready\"}"])
+    }
+
+    func testFactoryHealthBridgeUsesExactSessionAndSecureTeardown() throws {
+        let installed = try installedEntry()
+        let configured = expectation(description: "configured health bridge")
+        let messages = LockedValue<[String]>([])
+        SecureWebCapsuleWebViewFactory.makeWithHealth(
+            frame: .zero,
+            storageRootURL: installed.root,
+            session: installed.session,
+            receiveReady: { body, _ in messages.mutate { $0.append(body) } },
+            fatalObserver: { _ in }
+        ) { result in
+            switch result {
+            case let .failure(error):
+                XCTFail("unexpected configuration failure: \(error)")
+            case let .success(made):
+                XCTAssertEqual(made.webView.configuration.userContentController.userScripts.count, 1)
+                XCTAssertTrue(made.webView.configuration.userContentController.userScripts[0].isForMainFrameOnly)
+                made.readyBridge.receive(body: "ready", source: ReadyMessageSource(
+                    isMainFrame: true,
+                    scheme: "webcapsule",
+                    host: installed.session.capsuleId,
+                    port: 0,
+                    documentURL: made.handler.entryURL
+                ))
+                XCTAssertEqual(messages.get(), ["ready"])
+                made.invalidate()
+                made.readyBridge.receive(body: "late", source: ReadyMessageSource(
+                    isMainFrame: true,
+                    scheme: "webcapsule",
+                    host: installed.session.capsuleId,
+                    port: 0,
+                    documentURL: made.handler.entryURL
+                ))
+                XCTAssertEqual(messages.get(), ["ready"])
+            }
+            configured.fulfill()
+        }
+        wait(for: [configured], timeout: 10)
+    }
+
     func testFactoryRuleCompilationFailureReturnsStableErrorWithoutWebView() throws {
         let installed = try installedEntry()
         let failed = expectation(description: "failed")

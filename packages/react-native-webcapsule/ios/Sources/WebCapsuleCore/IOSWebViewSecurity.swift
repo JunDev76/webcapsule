@@ -77,6 +77,89 @@ public struct SecureWebCapsuleWebView {
     public let webView: WKWebView
     public let handler: WebCapsuleURLSchemeHandler
     public let delegate: WebCapsuleWebViewDelegate
+    let readyBridge: WebCapsuleReadyBridge
+
+    public func invalidate() {
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        readyBridge.invalidate()
+        handler.invalidate()
+    }
+}
+
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WebCapsuleReadyBridge?
+
+    func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage
+    ) {
+        target?.receive(message)
+    }
+}
+
+final class WebCapsuleReadyBridge: NSObject {
+    private weak var controller: WKUserContentController?
+    private let receiveMessage: (String, ReadyMessageSource) -> Void
+    private let proxy = WeakScriptMessageHandler()
+    private let lock = NSLock()
+    private var active = true
+
+    init(
+        controller: WKUserContentController,
+        session: SessionDescriptor,
+        receiveMessage: @escaping (String, ReadyMessageSource) -> Void
+    ) {
+        self.controller = controller
+        self.receiveMessage = receiveMessage
+        super.init()
+        proxy.target = self
+        controller.addUserScript(WKUserScript(
+            source: WebCapsuleReadyBridgeContract.bootstrapScript(session: session),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        controller.add(proxy, name: WebCapsuleReadyBridgeContract.channelName)
+    }
+
+    fileprivate func receive(_ message: WKScriptMessage) {
+        guard message.name == WebCapsuleReadyBridgeContract.channelName else { return }
+        receive(
+            body: message.body,
+            source: ReadyMessageSource(
+                isMainFrame: message.frameInfo.isMainFrame,
+                scheme: message.frameInfo.securityOrigin.protocol,
+                host: message.frameInfo.securityOrigin.host,
+                port: message.frameInfo.securityOrigin.port,
+                documentURL: message.frameInfo.request.url
+            )
+        )
+    }
+
+    func receive(body: Any, source: ReadyMessageSource) {
+        lock.lock()
+        let isActive = active
+        lock.unlock()
+        guard isActive else { return }
+        guard let body = body as? String else {
+            receiveMessage("", source)
+            return
+        }
+        receiveMessage(body, source)
+    }
+
+    func invalidate() {
+        lock.lock()
+        guard active else { lock.unlock(); return }
+        active = false
+        lock.unlock()
+        controller?.removeScriptMessageHandler(forName: WebCapsuleReadyBridgeContract.channelName)
+        controller?.removeAllUserScripts()
+        proxy.target = nil
+    }
+
+    deinit { invalidate() }
 }
 
 public enum SecureWebCapsuleWebViewFactory {
@@ -85,6 +168,26 @@ public enum SecureWebCapsuleWebViewFactory {
         storageRootURL: URL,
         session: SessionDescriptor,
         compiler: WebCapsuleContentRuleCompiling = WKWebCapsuleContentRuleCompiler(),
+        completion: @escaping (Result<SecureWebCapsuleWebView, WebCapsuleError>) -> Void
+    ) {
+        makeWithHealth(
+            frame: frame,
+            storageRootURL: storageRootURL,
+            session: session,
+            compiler: compiler,
+            receiveReady: { _, _ in },
+            fatalObserver: { _ in },
+            completion: completion
+        )
+    }
+
+    static func makeWithHealth(
+        frame: CGRect,
+        storageRootURL: URL,
+        session: SessionDescriptor,
+        compiler: WebCapsuleContentRuleCompiling = WKWebCapsuleContentRuleCompiler(),
+        receiveReady: @escaping (String, ReadyMessageSource) -> Void,
+        fatalObserver: @escaping @Sendable (WebCapsuleError) -> Void,
         completion: @escaping (Result<SecureWebCapsuleWebView, WebCapsuleError>) -> Void
     ) {
         compiler.compile(
@@ -96,7 +199,8 @@ public enum SecureWebCapsuleWebViewFactory {
                     let rule = try result.get()
                     let made = try WebCapsuleWebViewConfiguration.make(
                         storageRootURL: storageRootURL,
-                        session: session
+                        session: session,
+                        fatalObserver: fatalObserver
                     )
                     let configuration = made.configuration
                     configuration.websiteDataStore = .nonPersistent()
@@ -105,6 +209,11 @@ public enum SecureWebCapsuleWebViewFactory {
                     configuration.allowsAirPlayForMediaPlayback = false
                     configuration.mediaTypesRequiringUserActionForPlayback = .all
                     configuration.userContentController.add(rule)
+                    let readyBridge = WebCapsuleReadyBridge(
+                        controller: configuration.userContentController,
+                        session: session,
+                        receiveMessage: receiveReady
+                    )
                     let delegate = WebCapsuleWebViewDelegate(
                         entryURL: made.handler.entryURL,
                         capsuleId: session.capsuleId,
@@ -118,7 +227,8 @@ public enum SecureWebCapsuleWebViewFactory {
                     completion(.success(SecureWebCapsuleWebView(
                         webView: webView,
                         handler: made.handler,
-                        delegate: delegate
+                        delegate: delegate,
+                        readyBridge: readyBridge
                     )))
                 } catch let error as WebCapsuleError {
                     completion(.failure(error))
@@ -139,6 +249,7 @@ public final class WebCapsuleWebViewDelegate: NSObject, WKNavigationDelegate, WK
     public let version: String
     public var didLoadEntry: (() -> Void)?
     public var didFailEntry: ((WebCapsuleError) -> Void)?
+    public var didEncounterFatalFailure: ((WebCapsuleError) -> Void)?
 
     private var entryNavigation: WKNavigation?
     private var loadEmitted = false
@@ -155,23 +266,40 @@ public final class WebCapsuleWebViewDelegate: NSObject, WKNavigationDelegate, WK
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        guard navigationAction.targetFrame != nil,
-              !navigationAction.shouldPerformDownload else {
+        guard navigationAction.targetFrame != nil else {
+            // Match Android's onCreateWindow denial: reject without turning an
+            // ordinary new-window request into a trial health failure.
             decisionHandler(.cancel)
             return
         }
+        guard !navigationAction.shouldPerformDownload else {
+            didEncounterFatalFailure?(WebCapsuleError(
+                code: .stabilizationFailed,
+                message: "Download navigation is denied"
+            ))
+            decisionHandler(.cancel)
+            return
+        }
+        let allowed: Bool
         if navigationAction.targetFrame?.isMainFrame == true {
-            decisionHandler(WebCapsuleNavigationPolicy.allowsTopLevelNavigation(
+            allowed = WebCapsuleNavigationPolicy.allowsTopLevelNavigation(
                 candidate: navigationAction.request.url,
                 entryURL: entryURL
-            ) ? .allow : .cancel)
+            )
         } else {
-            decisionHandler(WebCapsuleNavigationPolicy.allowsPinnedSubframeNavigation(
+            allowed = WebCapsuleNavigationPolicy.allowsPinnedSubframeNavigation(
                 candidate: navigationAction.request.url,
                 capsuleId: capsuleId,
                 version: version
-            ) ? .allow : .cancel)
+            )
         }
+        if !allowed {
+            didEncounterFatalFailure?(WebCapsuleError(
+                code: .stabilizationFailed,
+                message: "Navigation away from the pinned capsule is denied"
+            ))
+        }
+        decisionHandler(allowed ? .allow : .cancel)
     }
 
     @available(iOS 15.0, *)
@@ -181,6 +309,10 @@ public final class WebCapsuleWebViewDelegate: NSObject, WKNavigationDelegate, WK
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
         guard navigationResponse.canShowMIMEType else {
+            didEncounterFatalFailure?(WebCapsuleError(
+                code: .stabilizationFailed,
+                message: "Entry response cannot be displayed securely"
+            ))
             decisionHandler(.cancel)
             return
         }
@@ -196,6 +328,12 @@ public final class WebCapsuleWebViewDelegate: NSObject, WKNavigationDelegate, WK
                 capsuleId: capsuleId,
                 version: version
             )
+        }
+        if !allowed {
+            didEncounterFatalFailure?(WebCapsuleError(
+                code: .stabilizationFailed,
+                message: "Navigation response outside the pinned capsule is denied"
+            ))
         }
         decisionHandler(allowed ? .allow : .cancel)
     }
@@ -228,7 +366,16 @@ public final class WebCapsuleWebViewDelegate: NSObject, WKNavigationDelegate, WK
         if navigation === entryNavigation || entryNavigation == nil { failEntry() }
     }
 
-    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { failEntry() }
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if loadEmitted {
+            didEncounterFatalFailure?(WebCapsuleError(
+                code: .stabilizationFailed,
+                message: "WebView content process exited"
+            ))
+        } else {
+            failEntry()
+        }
+    }
 
     public func webView(
         _ webView: WKWebView,

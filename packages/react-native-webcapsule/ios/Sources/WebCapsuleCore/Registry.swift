@@ -327,6 +327,55 @@ final class RegistryManager {
         }
     }
 
+    func commitHealthyLocked(session: SessionDescriptor) throws -> CapsuleRegistry {
+        try sessionTransition {
+            try compareAndSwapLocked(
+                capsuleId: session.capsuleId,
+                expectedGeneration: session.registryGeneration
+            ) { current in
+                try self.assertSession(current, session: session)
+                return CapsuleRegistry(
+                    schemaVersion: 1,
+                    capsuleId: current.capsuleId,
+                    generation: current.generation + 1,
+                    active: ActiveVersion(version: current.active.version, healthy: true),
+                    previous: current.previous,
+                    pending: nil,
+                    highestSeenVersion: current.highestSeenVersion,
+                    blockedVersions: current.blockedVersions
+                )
+            }
+        }
+    }
+
+    func rollbackPendingLocked(
+        session: SessionDescriptor,
+        restoredVersion: String
+    ) throws -> CapsuleRegistry {
+        try sessionTransition {
+            try compareAndSwapLocked(
+                capsuleId: session.capsuleId,
+                expectedGeneration: session.registryGeneration
+            ) { current in
+                try self.assertSession(current, session: session)
+                guard current.pending?.attempts == registryMaximumPendingAttempts,
+                      current.previous?.version == restoredVersion else {
+                    throw WebCapsuleError(code: .sessionMismatch, message: "Final rollback state differs")
+                }
+                return CapsuleRegistry(
+                    schemaVersion: 1,
+                    capsuleId: current.capsuleId,
+                    generation: current.generation + 1,
+                    active: ActiveVersion(version: restoredVersion, healthy: true),
+                    previous: nil,
+                    pending: nil,
+                    highestSeenVersion: current.highestSeenVersion,
+                    blockedVersions: try self.insertBlocked(current.blockedVersions, session.version)
+                )
+            }
+        }
+    }
+
     func rollbackExhaustedLocked(_ expected: CapsuleRegistry, restoredVersion: String) throws -> CapsuleRegistry {
         try compareAndSwapLocked(capsuleId: expected.capsuleId, expectedGeneration: expected.generation) { current in
             guard current == expected,
@@ -367,6 +416,25 @@ final class RegistryManager {
                 highestSeenVersion: highest,
                 blockedVersions: try insertBlocked(current.blockedVersions, current.active.version)
             )
+        }
+    }
+
+    private func assertSession(_ current: CapsuleRegistry, session: SessionDescriptor) throws {
+        guard current.generation == session.registryGeneration,
+              !current.active.healthy,
+              current.active.version == session.version,
+              current.pending?.version == session.trialVersion,
+              current.pending?.attempts == session.trialAttempt else {
+            throw WebCapsuleError(code: .sessionMismatch, message: "Pending trial no longer matches session")
+        }
+    }
+
+    private func sessionTransition<T>(_ operation: () throws -> T) throws -> T {
+        do {
+            return try operation()
+        } catch let error as WebCapsuleError where
+            error.code == .registryInvalid || error.code == .updateStateChanged {
+            throw WebCapsuleError(code: .sessionMismatch, message: "Registry changed during session")
         }
     }
 

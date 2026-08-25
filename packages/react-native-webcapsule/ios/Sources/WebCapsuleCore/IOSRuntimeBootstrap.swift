@@ -332,6 +332,9 @@ public final class IOSRuntimeBootstrap: @unchecked Sendable {
                 throw error
             }
         }
+        // Capture the health deadline origin immediately after the durable
+        // attempt transition, before record/blob validation or WebView setup.
+        let createdMonotonicNanoseconds = monotonicClock()
 
         let record: VersionRecord
         do {
@@ -352,7 +355,7 @@ public final class IOSRuntimeBootstrap: @unchecked Sendable {
             entry: record.entry,
             recordSHA256: digest,
             registryGeneration: registry.generation,
-            createdMonotonicNanoseconds: monotonicClock(),
+            createdMonotonicNanoseconds: createdMonotonicNanoseconds,
             files: files,
             trialVersion: registry.active.healthy ? nil : registry.active.version,
             trialAttempt: trialAttempt,

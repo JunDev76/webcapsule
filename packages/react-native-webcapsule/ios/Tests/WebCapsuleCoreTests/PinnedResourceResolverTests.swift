@@ -519,7 +519,12 @@ final class PinnedResourceTaskCoordinatorTests: XCTestCase {
         let data = Data(repeating: 0x41, count: PinnedResourceTaskCoordinator.maximumChunkSize * 3)
         let setup = try resolver(data: data)
         let callbacks = DispatchQueue(label: "callback.midstop")
-        let coordinator = PinnedResourceTaskCoordinator(resolver: setup.resolver, callbackQueue: callbacks)
+        let fatalCount = ResourceFatalCount()
+        let coordinator = PinnedResourceTaskCoordinator(
+            resolver: setup.resolver,
+            callbackQueue: callbacks,
+            fatalObserver: { _ in fatalCount.increment() }
+        )
         let firstData = expectation(description: "first data")
         let sink = FakeSink(url: setup.url)
         sink.onFirstData = { [weak coordinator, weak sink] in
@@ -533,6 +538,7 @@ final class PinnedResourceTaskCoordinatorTests: XCTestCase {
         let snapshot = sink.snapshot()
         XCTAssertEqual(snapshot.events, ["response", "data"])
         XCTAssertEqual(snapshot.data.count, PinnedResourceTaskCoordinator.maximumChunkSize)
+        XCTAssertEqual(fatalCount.value, 0)
     }
 
     func testConcurrentTasksCompleteIndependently() throws {
@@ -603,6 +609,23 @@ final class PinnedResourceTaskCoordinatorTests: XCTestCase {
         )
         let resolver = try PinnedResourceResolver(storageRootURL: root, session: session)
         return (resolver, try XCTUnwrap(URL(string: "webcapsule://com.example.fixture/1.0.0/content.bin")))
+    }
+}
+
+private final class ResourceFatalCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }
 
