@@ -33,7 +33,7 @@ public enum WebCapsuleConfigValidator {
         }
     }
 
-    private static func validateBundledAssetPath(_ path: String) throws {
+    static func validateBundledAssetPath(_ path: String) throws {
         let invalid = path.isEmpty
             || path.hasPrefix("/")
             || path.hasSuffix("/")

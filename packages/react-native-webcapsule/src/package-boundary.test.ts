@@ -25,4 +25,34 @@ describe("React Native package boundary", () => {
       false,
     );
   });
+
+  it("keeps the iOS component, props, and direct events aligned with TypeScript", async () => {
+    const [typescript, swift] = await Promise.all([
+      readFile(resolve(root, "src/index.ts"), "utf8"),
+      readFile(
+        resolve(
+          root,
+          "ios/Sources/WebCapsuleCore/ReactNativeWebCapsuleView.swift",
+        ),
+        "utf8",
+      ),
+    ]);
+    expect(typescript).toContain(
+      'requireNativeComponent<WebCapsuleViewProps>("WebCapsuleView")',
+    );
+    for (const prop of [
+      "capsuleId",
+      "bundledAssetPath",
+      "publicKeys",
+      "runtimeVersion",
+    ]) {
+      expect(typescript).toContain(`readonly ${prop}:`);
+      expect(swift).toContain(`propConfig_${prop}()`);
+    }
+    for (const event of ["onLoad", "onError", "onRollback"]) {
+      expect(typescript).toContain(`readonly ${event}?:`);
+      expect(swift).toContain(`propConfig_${event}()`);
+      expect(swift).toContain(`var ${event}: RCTDirectEventBlock?`);
+    }
+  });
 });
