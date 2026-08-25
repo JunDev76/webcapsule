@@ -291,7 +291,8 @@ final class CapsuleInstallerTests: XCTestCase {
         let store = try installer(lockRoot)
         let lockTarget = lockRoot.appendingPathComponent("target")
         try Data().write(to: lockTarget)
-        try FileManager.default.createSymbolicLink(at: lockRoot.appendingPathComponent("locks/install.lock"), withDestinationURL: lockTarget)
+        let lockName = CapsuleStorage.encodeStorageKey("com.example.fixture") + ".lock"
+        try FileManager.default.createSymbolicLink(at: lockRoot.appendingPathComponent("locks/\(lockName)"), withDestinationURL: lockTarget)
         assertError(.lockFailed) {
             try store.installBundled(archiveURL: self.fixture("valid-minimal"), request: self.fixtureRequest())
         }

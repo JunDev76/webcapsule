@@ -11,7 +11,15 @@ enum CapsuleInstallFaultPoint: CaseIterable {
     case afterVersionPublish
 }
 
+enum RegistryWriteFaultPoint: CaseIterable {
+    case beforeTempSync
+    case afterTempSync
+    case beforeReplace
+    case afterReplace
+}
+
 typealias CapsuleInstallFaultInjector = (CapsuleInstallFaultPoint) throws -> Void
+typealias RegistryWriteFaultInjector = (RegistryWriteFaultPoint) throws -> Void
 
 final class CapsuleStorage {
     let stagingURL: URL
@@ -21,10 +29,14 @@ final class CapsuleStorage {
     private let versions: StorageDirectory
     private let locks: StorageDirectory
     private let stagingIdentity: StrictZipFileIdentity
-    private let processLock: NSLock
     private let faultInjector: CapsuleInstallFaultInjector
+    private let registryFaultInjector: RegistryWriteFaultInjector
 
-    init(rootURL: URL, faultInjector: @escaping CapsuleInstallFaultInjector = { _ in }) throws {
+    init(
+        rootURL: URL,
+        faultInjector: @escaping CapsuleInstallFaultInjector = { _ in },
+        registryFaultInjector: @escaping RegistryWriteFaultInjector = { _ in }
+    ) throws {
         guard rootURL.isFileURL else {
             throw WebCapsuleError(code: .invalidArgument, message: "Storage root must be a file URL")
         }
@@ -35,17 +47,21 @@ final class CapsuleStorage {
         let staging = try root.openOrCreateDirectory("staging")
         stagingIdentity = staging.identity
         locks = try root.openOrCreateDirectory("locks")
-        processLock = ProcessInstallLockPool.shared.lock(for: root.identity)
         stagingURL = staging.url
         self.faultInjector = faultInjector
+        self.registryFaultInjector = registryFaultInjector
     }
 
-    func withExclusiveLock<T>(_ body: () throws -> T) throws -> T {
+    func withExclusiveLock<T>(capsuleId: String, _ body: () throws -> T) throws -> T {
+        try CapsuleManifestParser.validateCapsuleID(capsuleId)
+        let key = Self.encodeStorageKey(capsuleId)
+        let processLock = ProcessCapsuleLockPool.shared.lock(for: root.identity, capsuleKey: key)
         processLock.lock()
         defer { processLock.unlock() }
+        let lockName = "\(key).lock"
         let descriptor = Darwin.openat(
             locks.descriptor,
-            "install.lock",
+            lockName,
             O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
             S_IRUSR | S_IWUSR
         )
@@ -59,7 +75,7 @@ final class CapsuleStorage {
               attributes.st_nlink == 1,
               attributes.st_uid == Darwin.geteuid(),
               attributes.st_mode & 0o777 == S_IRUSR | S_IWUSR,
-              lockPathMatches(descriptor: descriptor) else {
+              lockPathMatches(name: lockName, descriptor: descriptor) else {
             throw WebCapsuleError(code: .lockFailed, message: "Storage install lock is unsafe")
         }
         var lock = flock(
@@ -77,20 +93,297 @@ final class CapsuleStorage {
             lock.l_type = Int16(F_UNLCK)
             _ = Darwin.fcntl(descriptor, F_SETLK, &lock)
         }
-        guard lockPathMatches(descriptor: descriptor) else {
+        guard lockPathMatches(name: lockName, descriptor: descriptor) else {
             throw WebCapsuleError(code: .lockFailed, message: "Storage install lock was substituted while waiting")
         }
         return try body()
     }
 
-    private func lockPathMatches(descriptor: Int32) -> Bool {
+    private func lockPathMatches(name: String, descriptor: Int32) -> Bool {
         var opened = stat()
         var current = stat()
         return Darwin.fstat(descriptor, &opened) == 0
-            && Darwin.fstatat(locks.descriptor, "install.lock", &current, AT_SYMLINK_NOFOLLOW) == 0
+            && Darwin.fstatat(locks.descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0
             && current.st_mode & S_IFMT == S_IFREG
             && current.st_dev == opened.st_dev
             && current.st_ino == opened.st_ino
+    }
+
+    func readRegistry(capsuleId: String) throws -> Data? {
+        try CapsuleManifestParser.validateCapsuleID(capsuleId)
+        guard root.entryExists("registries") else { return nil }
+        let registries: StorageDirectory
+        do {
+            registries = try root.openDirectory("registries")
+        } catch {
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry directory is unsafe")
+        }
+        let name = registryFileName(capsuleId)
+        var pathAttributes = stat()
+        if Darwin.fstatat(registries.descriptor, name, &pathAttributes, AT_SYMLINK_NOFOLLOW) != 0 {
+            if errno == ENOENT { return nil }
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry path cannot be inspected")
+        }
+        guard pathAttributes.st_mode & S_IFMT == S_IFREG,
+              pathAttributes.st_uid == Darwin.geteuid(),
+              pathAttributes.st_nlink == 1,
+              pathAttributes.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry is not an app-owned 0600 regular file")
+        }
+        let descriptor = Darwin.openat(registries.descriptor, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry cannot be opened safely")
+        }
+        defer { Darwin.close(descriptor) }
+        var opened = stat()
+        var current = stat()
+        guard Darwin.fstat(descriptor, &opened) == 0,
+              Darwin.fstatat(registries.descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0,
+              opened.st_mode & S_IFMT == S_IFREG,
+              opened.st_dev == current.st_dev,
+              opened.st_ino == current.st_ino,
+              opened.st_uid == Darwin.geteuid(),
+              opened.st_nlink == 1,
+              opened.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry was substituted while opening")
+        }
+        do {
+            return try readAll(descriptor: descriptor, maximum: 1024 * 1024)
+        } catch {
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry cannot be read")
+        }
+    }
+
+    func replaceRegistry(capsuleId: String, bytes: Data) throws {
+        try CapsuleManifestParser.validateCapsuleID(capsuleId)
+        let registries = try root.openOrCreateDirectory("registries")
+        let finalName = registryFileName(capsuleId)
+        let existingIdentity = try validateRegistryDestinationIfPresent(finalName, in: registries)
+        let temporaryName = ".registry-\(Self.encodeStorageKey(capsuleId))-\(UUID().uuidString.lowercased()).tmp"
+        let descriptor = Darwin.openat(
+            registries.descriptor,
+            temporaryName,
+            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+            S_IRUSR | S_IWUSR
+        )
+        guard descriptor >= 0 else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Registry temporary file cannot be created")
+        }
+        var attributes = stat()
+        var identity: StrictZipFileIdentity?
+        var replaced = false
+        defer {
+            Darwin.close(descriptor)
+            if !replaced, let identity {
+                registries.removeFileIfOwned(temporaryName, identity: identity)
+            }
+        }
+        guard Darwin.fstat(descriptor, &attributes) == 0,
+              attributes.st_mode & S_IFMT == S_IFREG,
+              attributes.st_uid == Darwin.geteuid(),
+              attributes.st_nlink == 1,
+              attributes.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Registry temporary file is unsafe")
+        }
+        identity = StrictZipFileIdentity(device: attributes.st_dev, inode: attributes.st_ino)
+        try writeAll(descriptor: descriptor, data: bytes, message: "Registry temporary file cannot be written")
+        try registryFaultInjector(.beforeTempSync)
+        guard Darwin.fsync(descriptor) == 0 else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Registry temporary file cannot be synced")
+        }
+        try registryFaultInjector(.afterTempSync)
+        guard root.isReachableAtOriginalURL(),
+              root.childMatches("registries", identity: registries.identity),
+              registries.pathMatches(temporaryName, descriptor: descriptor) else {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Registry storage was substituted before publication")
+        }
+        let currentIdentity = try validateRegistryDestinationIfPresent(finalName, in: registries)
+        guard currentIdentity == existingIdentity else {
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry destination changed before publication")
+        }
+        try registryFaultInjector(.beforeReplace)
+        if let existingIdentity {
+            guard Darwin.renameatx_np(
+                registries.descriptor,
+                temporaryName,
+                registries.descriptor,
+                finalName,
+                UInt32(RENAME_SWAP)
+            ) == 0 else {
+                throw WebCapsuleError(code: .storageIOFailed, message: "Registry atomic exchange failed")
+            }
+            replaced = true
+            guard registries.pathMatches(finalName, descriptor: descriptor),
+                  registries.entryIdentity(temporaryName) == existingIdentity else {
+                throw WebCapsuleError(code: .unsafeStorageLayout, message: "Registry destination was substituted during exchange")
+            }
+            registries.removeFileIfOwned(temporaryName, identity: existingIdentity)
+            guard !registries.entryExists(temporaryName) else {
+                throw WebCapsuleError(code: .storageIOFailed, message: "Replaced registry cannot be unlinked safely")
+            }
+        } else {
+            guard Darwin.renameatx_np(
+                registries.descriptor,
+                temporaryName,
+                registries.descriptor,
+                finalName,
+                UInt32(RENAME_EXCL)
+            ) == 0 else {
+                throw WebCapsuleError(
+                    code: errno == EEXIST ? .registryInvalid : .storageIOFailed,
+                    message: "Initial registry no-replace publication failed"
+                )
+            }
+            replaced = true
+            guard registries.pathMatches(finalName, descriptor: descriptor) else {
+                throw WebCapsuleError(code: .unsafeStorageLayout, message: "Published registry inode differs")
+            }
+        }
+        guard Darwin.fsync(registries.descriptor) == 0 else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Registry directory sync failed")
+        }
+        try registryFaultInjector(.afterReplace)
+    }
+
+    func cleanupStagingOperations(capsuleId: String) throws {
+        let staging: StorageDirectory
+        do {
+            staging = try root.openDirectory("staging")
+        } catch {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging root is unsafe")
+        }
+        guard staging.identity.device == stagingIdentity.device,
+              staging.identity.inode == stagingIdentity.inode else {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging root identity changed")
+        }
+        for operationName in try staging.entryNames() {
+            guard let uuid = UUID(uuidString: operationName),
+                  uuid.uuidString.lowercased() == operationName else {
+                throw WebCapsuleError(code: .unsafeStorageLayout, message: "Unexpected staging operation name")
+            }
+            let operation: StorageDirectory
+            do {
+                operation = try staging.openDirectory(operationName)
+            } catch {
+                throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging operation is not a safe directory")
+            }
+            let owner = try readStagingOwner(operation)
+            if owner != capsuleId { continue }
+            for fileName in try operation.entryNames() {
+                guard isOwnedStagingFileName(fileName) else {
+                    throw WebCapsuleError(code: .unsafeStorageLayout, message: "Unexpected staging operation entry")
+                }
+                var attributes = stat()
+                guard Darwin.fstatat(operation.descriptor, fileName, &attributes, AT_SYMLINK_NOFOLLOW) == 0,
+                      attributes.st_mode & S_IFMT == S_IFREG,
+                      attributes.st_uid == Darwin.geteuid(),
+                      attributes.st_nlink >= 1,
+                      [S_IRUSR | S_IWUSR, S_IRUSR | S_IRGRP | S_IROTH].contains(attributes.st_mode & 0o777) else {
+                    throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging operation entry is unsafe")
+                }
+                operation.removeFileIfOwned(
+                    fileName,
+                    identity: StrictZipFileIdentity(device: attributes.st_dev, inode: attributes.st_ino)
+                )
+                guard !operation.entryExists(fileName) else {
+                    throw WebCapsuleError(code: .storageIOFailed, message: "Staging operation entry cannot be removed")
+                }
+            }
+            staging.removeEmptyDirectoryIfOwned(operationName, identity: operation.identity)
+            guard !staging.entryExists(operationName) else {
+                throw WebCapsuleError(code: .storageIOFailed, message: "Staging operation cannot be removed")
+            }
+        }
+    }
+
+    private func readStagingOwner(_ operation: StorageDirectory) throws -> String {
+        let descriptor = Darwin.openat(operation.descriptor, ".capsule-owner", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging owner marker is missing or unsafe")
+        }
+        defer { Darwin.close(descriptor) }
+        var attributes = stat()
+        guard Darwin.fstat(descriptor, &attributes) == 0,
+              attributes.st_mode & S_IFMT == S_IFREG,
+              attributes.st_uid == Darwin.geteuid(),
+              attributes.st_nlink == 1,
+              attributes.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging owner marker is unsafe")
+        }
+        let bytes = try readAll(descriptor: descriptor, maximum: 512)
+        guard bytes.last == 0x0A, bytes.dropLast().last != 0x0A,
+              let encoded = String(data: Data(bytes.dropLast()), encoding: .utf8),
+              !encoded.isEmpty else {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging owner marker is invalid")
+        }
+        let owner: String
+        do {
+            owner = try Self.decodeStorageKey(encoded)
+            try CapsuleManifestParser.validateCapsuleID(owner)
+        } catch {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging owner marker identity is invalid")
+        }
+        return owner
+    }
+
+    private func isOwnedStagingFileName(_ name: String) -> Bool {
+        if name == ".capsule-owner" || name == "record.json" { return true }
+        let bytes = Array(name.utf8)
+        return bytes.count == 13
+            && bytes[8...].elementsEqual(Array(".blob".utf8))
+            && bytes[..<8].allSatisfy { (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }
+    }
+
+    func cleanupRegistryTemps(capsuleId: String) throws {
+        guard root.entryExists("registries") else { return }
+        let registries: StorageDirectory
+        do {
+            registries = try root.openDirectory("registries")
+        } catch {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Registry directory is unsafe")
+        }
+        let prefix = ".registry-\(Self.encodeStorageKey(capsuleId))-"
+        for name in try registries.entryNames() where name.hasPrefix(prefix) && name.hasSuffix(".tmp") {
+            let uuidText = String(name.dropFirst(prefix.count).dropLast(4))
+            guard UUID(uuidString: uuidText) != nil, uuidText == uuidText.lowercased() else {
+                throw WebCapsuleError(code: .unsafeStorageLayout, message: "Registry temporary name is not canonical")
+            }
+            var attributes = stat()
+            guard Darwin.fstatat(registries.descriptor, name, &attributes, AT_SYMLINK_NOFOLLOW) == 0,
+                  attributes.st_mode & S_IFMT == S_IFREG,
+                  attributes.st_uid == Darwin.geteuid(),
+                  attributes.st_nlink == 1,
+                  attributes.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+                throw WebCapsuleError(code: .unsafeStorageLayout, message: "Registry temporary entry is unsafe")
+            }
+            let identity = StrictZipFileIdentity(device: attributes.st_dev, inode: attributes.st_ino)
+            registries.removeFileIfOwned(name, identity: identity)
+            guard !registries.entryExists(name) else {
+                throw WebCapsuleError(code: .storageIOFailed, message: "Registry temporary file cannot be removed")
+            }
+        }
+    }
+
+    func registryFileName(_ capsuleId: String) -> String {
+        "\(Self.encodeStorageKey(capsuleId)).json"
+    }
+
+    private func validateRegistryDestinationIfPresent(
+        _ name: String,
+        in registries: StorageDirectory
+    ) throws -> StrictZipFileIdentity? {
+        var attributes = stat()
+        if Darwin.fstatat(registries.descriptor, name, &attributes, AT_SYMLINK_NOFOLLOW) != 0 {
+            if errno == ENOENT { return nil }
+            throw WebCapsuleError(code: .registryInvalid, message: "Registry destination cannot be inspected")
+        }
+        guard attributes.st_mode & S_IFMT == S_IFREG,
+              attributes.st_uid == Darwin.geteuid(),
+              attributes.st_nlink == 1,
+              attributes.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+            throw WebCapsuleError(code: .registryInvalid, message: "Unsafe registry destination cannot be replaced")
+        }
+        return StrictZipFileIdentity(device: attributes.st_dev, inode: attributes.st_ino)
     }
 
     func install(_ capsule: VerifiedCapsule) throws -> CapsuleInstallResult {
@@ -464,16 +757,39 @@ final class CapsuleStorage {
     static func encodeStorageKey(_ value: String) -> String {
         value.utf8.map { String(format: "%02x", $0) }.joined()
     }
+
+    static func decodeStorageKey(_ value: String) throws -> String {
+        let bytes = Array(value.utf8)
+        guard !bytes.isEmpty, bytes.count.isMultiple(of: 2), bytes.allSatisfy({
+            (0x30...0x39).contains($0) || (0x61...0x66).contains($0)
+        }) else {
+            throw WebCapsuleError(code: .storageInvariantViolation, message: "Storage key encoding is invalid")
+        }
+        var decoded = Data()
+        decoded.reserveCapacity(bytes.count / 2)
+        func nibble(_ byte: UInt8) -> UInt8 {
+            (0x30...0x39).contains(byte) ? byte - 0x30 : byte - 0x61 + 10
+        }
+        for index in stride(from: 0, to: bytes.count, by: 2) {
+            decoded.append(nibble(bytes[index]) << 4 | nibble(bytes[index + 1]))
+        }
+        guard let result = String(data: decoded, encoding: .utf8),
+              result.precomposedStringWithCanonicalMapping == result,
+              encodeStorageKey(result) == value else {
+            throw WebCapsuleError(code: .storageInvariantViolation, message: "Storage key is not canonical UTF-8")
+        }
+        return result
+    }
 }
 
-private final class ProcessInstallLockPool: @unchecked Sendable {
-    static let shared = ProcessInstallLockPool()
+private final class ProcessCapsuleLockPool: @unchecked Sendable {
+    static let shared = ProcessCapsuleLockPool()
 
     private let mutex = NSLock()
     private var locks: [String: NSLock] = [:]
 
-    func lock(for identity: StrictZipFileIdentity) -> NSLock {
-        let key = "\(identity.device):\(identity.inode)"
+    func lock(for identity: StrictZipFileIdentity, capsuleKey: String) -> NSLock {
+        let key = "\(identity.device):\(identity.inode):\(capsuleKey)"
         mutex.lock()
         defer { mutex.unlock() }
         if let existing = locks[key] { return existing }
@@ -586,6 +902,39 @@ final class StorageDirectory {
         _ = Darwin.unlinkat(descriptor, name, 0)
     }
 
+    func entryIdentity(_ name: String) -> StrictZipFileIdentity? {
+        var attributes = stat()
+        guard Darwin.fstatat(descriptor, name, &attributes, AT_SYMLINK_NOFOLLOW) == 0,
+              attributes.st_mode & S_IFMT == S_IFREG else { return nil }
+        return StrictZipFileIdentity(device: attributes.st_dev, inode: attributes.st_ino)
+    }
+
+    func pathMatches(_ name: String, descriptor openedDescriptor: Int32) -> Bool {
+        var opened = stat()
+        var current = stat()
+        return Darwin.fstat(openedDescriptor, &opened) == 0
+            && Darwin.fstatat(descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0
+            && current.st_mode & S_IFMT == S_IFREG
+            && current.st_dev == opened.st_dev
+            && current.st_ino == opened.st_ino
+    }
+
+    func childMatches(_ name: String, identity childIdentity: StrictZipFileIdentity) -> Bool {
+        var current = stat()
+        return Darwin.fstatat(descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0
+            && current.st_mode & S_IFMT == S_IFDIR
+            && current.st_dev == childIdentity.device
+            && current.st_ino == childIdentity.inode
+    }
+
+    func isReachableAtOriginalURL() -> Bool {
+        var current = stat()
+        return Darwin.lstat(url.path, &current) == 0
+            && current.st_mode & S_IFMT == S_IFDIR
+            && current.st_dev == identity.device
+            && current.st_ino == identity.inode
+    }
+
     func removeEmptyDirectoryIfOwned(_ name: String, identity: StrictZipFileIdentity) {
         var attributes = stat()
         guard Darwin.fstatat(descriptor, name, &attributes, AT_SYMLINK_NOFOLLOW) == 0,
@@ -652,6 +1001,20 @@ private func readAll(descriptor: Int32, maximum: Int) throws -> Data {
             throw WebCapsuleError(code: .versionRecordInvalid, message: "Version record exceeds its size limit")
         }
         result.append(contentsOf: buffer[0..<count])
+    }
+}
+
+private func writeAll(descriptor: Int32, data: Data, message: String) throws {
+    try data.withUnsafeBytes { bytes in
+        var offset = 0
+        while offset < bytes.count {
+            let written = Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+            if written < 0 {
+                if errno == EINTR { continue }
+                throw WebCapsuleError(code: .storageIOFailed, message: message)
+            }
+            offset += written
+        }
     }
 }
 

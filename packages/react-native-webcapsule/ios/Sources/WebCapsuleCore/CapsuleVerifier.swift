@@ -140,7 +140,7 @@ public final class CapsuleVerifier: Sendable {
         try validateArchiveArgument(archiveURL)
 
         let stagingRoot = try ExistingDirectory(url: stagingRootURL)
-        let operation = try stagingRoot.createOperation()
+        let operation = try stagingRoot.createOperation(capsuleId: request.expectedCapsuleId)
         var succeeded = false
         defer {
             if !succeeded {
@@ -332,11 +332,18 @@ final class ExistingDirectory {
         Darwin.close(descriptor)
     }
 
-    func createOperation() throws -> OwnedOperationDirectory {
+    func createOperation(capsuleId: String) throws -> OwnedOperationDirectory {
         for _ in 0..<16 {
             let name = UUID().uuidString.lowercased()
             if Darwin.mkdirat(descriptor, name, S_IRWXU) == 0 {
-                return try OwnedOperationDirectory(root: self, name: name)
+                let operation = try OwnedOperationDirectory(root: self, name: name)
+                do {
+                    try operation.writeOwner(capsuleId)
+                    return operation
+                } catch {
+                    operation.cleanup()
+                    throw error
+                }
             }
             if errno != EEXIST {
                 throw WebCapsuleError(code: .storageIOFailed, message: "Operation staging directory cannot be created")
@@ -386,6 +393,47 @@ final class OwnedOperationDirectory {
     deinit {
         Darwin.close(descriptor)
         Darwin.close(rootDescriptor)
+    }
+
+    func writeOwner(_ capsuleId: String) throws {
+        let fileName = ".capsule-owner"
+        let descriptor = Darwin.openat(
+            self.descriptor,
+            fileName,
+            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+            S_IRUSR | S_IWUSR
+        )
+        guard descriptor >= 0 else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Staging owner marker cannot be created")
+        }
+        defer { Darwin.close(descriptor) }
+        var attributes = stat()
+        guard Darwin.fstat(descriptor, &attributes) == 0,
+              attributes.st_mode & S_IFMT == S_IFREG,
+              attributes.st_uid == Darwin.geteuid(),
+              attributes.st_nlink == 1,
+              attributes.st_mode & 0o777 == S_IRUSR | S_IWUSR else {
+            throw WebCapsuleError(code: .unsafeStorageLayout, message: "Staging owner marker is unsafe")
+        }
+        let data = Data((CapsuleStorage.encodeStorageKey(capsuleId) + "\n").utf8)
+        try data.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let written = Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                if written < 0 {
+                    if errno == EINTR { continue }
+                    throw WebCapsuleError(code: .storageIOFailed, message: "Staging owner marker cannot be written")
+                }
+                offset += written
+            }
+        }
+        guard Darwin.fsync(descriptor) == 0 else {
+            throw WebCapsuleError(code: .storageIOFailed, message: "Staging owner marker cannot be synced")
+        }
+        recordCreatedFile(
+            fileName,
+            identity: StrictZipFileIdentity(device: attributes.st_dev, inode: attributes.st_ino)
+        )
     }
 
     func recordCreatedFile(_ fileName: String, identity: StrictZipFileIdentity) {

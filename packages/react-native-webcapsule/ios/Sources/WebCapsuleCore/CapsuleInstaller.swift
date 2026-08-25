@@ -48,24 +48,26 @@ public final class CapsuleInstaller: @unchecked Sendable {
         archiveURL: URL,
         request: CapsuleVerificationRequest
     ) throws -> CapsuleInstallResult {
-        let verified = try verifier.verify(
-            archiveURL: archiveURL,
-            stagingRootURL: storage.stagingURL,
-            request: request
-        )
-        return try installVerified(verified)
+        try storage.withExclusiveLock(capsuleId: request.expectedCapsuleId) {
+            let verified = try verifier.verify(
+                archiveURL: archiveURL,
+                stagingRootURL: storage.stagingURL,
+                request: request
+            )
+            return try storage.install(verified)
+        }
     }
 
     /// Consumes a transient verifier result exactly once.
     public func installVerified(_ capsule: VerifiedCapsule) throws -> CapsuleInstallResult {
-        try storage.withExclusiveLock {
+        try storage.withExclusiveLock(capsuleId: capsule.manifest.capsuleId) {
             try storage.install(capsule)
         }
     }
 
     /// Strictly reads immutable metadata and revalidates every referenced blob.
     public func readInstalledVersion(capsuleId: String, version: String) throws -> VersionRecord {
-        try storage.withExclusiveLock {
+        try storage.withExclusiveLock(capsuleId: capsuleId) {
             try storage.read(capsuleId: capsuleId, version: version)
         }
     }
