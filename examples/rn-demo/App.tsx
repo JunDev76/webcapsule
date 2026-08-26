@@ -113,16 +113,18 @@ function App(): React.JSX.Element {
         <TouchableOpacity
           style={[styles.button, busy && styles.buttonDisabled]}
           disabled={busy}
-          onPress={() => installFrom('stable-v2.json', 'v2 (healthy)')}>
+          onPress={() => void installFrom('stable-v2.json', 'v2 (healthy)')}>
           <Text style={styles.buttonText}>v2 update install</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.button, busy && styles.buttonDisabled]}
           disabled={busy}
-          onPress={() => installFrom('stable-v3.json', 'v3 (broken)')}>
+          onPress={() => void installFrom('stable-v3.json', 'v3 (broken)')}>
           <Text style={styles.buttonText}>v3 update install</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={refreshState}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => void refreshState()}>
           <Text style={styles.buttonText}>refresh state</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={openNewSession}>

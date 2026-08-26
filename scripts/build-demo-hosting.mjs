@@ -78,7 +78,7 @@ for (const [source, version, file, _index] of releases) {
 
 console.log(`\nHosting artifacts written to ${out}`);
 console.log("Upload these files to GitHub Pages (releases/ directory):");
-for (const [_, version, file, index] of releases) {
+for (const [, , file, index] of releases) {
   console.log(`  ${file}`);
   console.log(`  ${index}`);
 }
