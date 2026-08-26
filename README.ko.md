@@ -106,9 +106,13 @@ export function GuideScreen() {
       publicKeys={{ "release-2027": PUBLIC_KEY }}
       runtimeVersion="1.0.0"
       onLoad={({ nativeEvent }) => console.log("loaded", nativeEvent.version)}
-      onError={({ nativeEvent }) => console.error(nativeEvent.code, nativeEvent.message)}
+      onError={({ nativeEvent }) =>
+        console.error(nativeEvent.code, nativeEvent.message)
+      }
       onRollback={({ nativeEvent }) =>
-        console.log(`rollback ${nativeEvent.failedVersion} -> ${nativeEvent.restoredVersion ?? "bundled"}`)
+        console.log(
+          `rollback ${nativeEvent.failedVersion} -> ${nativeEvent.restoredVersion ?? "bundled"}`,
+        )
       }
     />
   );
@@ -118,7 +122,10 @@ export function GuideScreen() {
 ### 3. 업데이트 적용
 
 ```ts
-import { installWebCapsuleUpdate, getWebCapsuleRuntimeState } from "@webcapsule/react-native";
+import {
+  installWebCapsuleUpdate,
+  getWebCapsuleRuntimeState,
+} from "@webcapsule/react-native";
 
 // 정적 호스팅된 서명 인덱스에서 새 capsule을 백그라운드로 검증·설치
 const result = await installWebCapsuleUpdate({
@@ -278,10 +285,10 @@ pnpm demo:ios             # iOS 데모 실행
 
 ### 플랫폼 지원
 
-| 플랫폼 | 상태 |
-| --- | --- |
+| 플랫폼  | 상태                                |
+| ------- | ----------------------------------- |
 | Android | 구현됨 (Kotlin, WebViewAssetLoader) |
-| iOS | 구현됨 (Swift, WKURLSchemeHandler) |
+| iOS     | 구현됨 (Swift, WKURLSchemeHandler)  |
 
 ### 후속 로드맵 (v1 범위 외)
 

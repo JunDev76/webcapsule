@@ -1,6 +1,7 @@
 pnpm-lock.yaml
 AGENTS.md
 README.md
+README.ko.md
 packages/plan.md
 fixtures/**/*.capsule
 fixtures/update-index-v1/duplicate-key.json
