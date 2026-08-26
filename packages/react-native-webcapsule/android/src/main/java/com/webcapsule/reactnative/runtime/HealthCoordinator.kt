@@ -51,8 +51,16 @@ internal class HealthCoordinator(
   private val success: () -> Unit,
   private val failure: (WebCapsuleException) -> Unit,
 ) {
-  private enum class State { WAITING_FOR_ENTRY, WAITING_FOR_READY, STABILIZING, SUCCEEDED, FAILED, CLOSED }
-  private var state = State.WAITING_FOR_ENTRY
+  /**
+   * Entry completion and a matching ready message are independent latches. Page
+   * scripts cannot observe `onPageFinished`, so the two signals race and no arrival
+   * order can be required of capsule content. Stabilization starts once both latches
+   * are set, timed from the later one.
+   */
+  private enum class State { AWAITING_LATCHES, STABILIZING, SUCCEEDED, FAILED, CLOSED }
+  private var state = State.AWAITING_LATCHES
+  private var entryCompleted = false
+  private var readyAccepted = false
   private var timer: Any? = null
 
   init {
@@ -62,17 +70,26 @@ internal class HealthCoordinator(
   }
 
   fun entryLoaded() {
-    if (state == State.WAITING_FOR_ENTRY) state = State.WAITING_FOR_READY
+    if (state != State.AWAITING_LATCHES || entryCompleted) return
+    entryCompleted = true
+    startStabilizationIfLatched()
   }
 
   fun ready(json: String, sourceOrigin: String, isMainFrame: Boolean) {
-    if (state == State.STABILIZING) return failOnce(WebCapsuleErrorCode.READY_MESSAGE_INVALID, "Duplicate ready message")
-    if (state != State.WAITING_FOR_READY) return failOnce(WebCapsuleErrorCode.READY_MESSAGE_INVALID, "Ready arrived before entry completed")
+    if (state == State.STABILIZING || state == State.SUCCEEDED) return failOnce(WebCapsuleErrorCode.READY_MESSAGE_INVALID, "Duplicate ready message")
+    if (state != State.AWAITING_LATCHES) return
+    if (readyAccepted) return failOnce(WebCapsuleErrorCode.READY_MESSAGE_INVALID, "Duplicate ready message")
     if (!isMainFrame || sourceOrigin != ORIGIN) return failOnce(WebCapsuleErrorCode.READY_MESSAGE_INVALID, "Ready source is not the pinned main frame")
     val message = try { ReadyMessageParser.parse(json) } catch (error: WebCapsuleException) { return failOnce(error.code, error.message ?: "Invalid ready message", error) }
     if (message.sessionId != session.sessionId || message.capsuleId != session.capsuleId || message.version != session.version) {
       return failOnce(WebCapsuleErrorCode.SESSION_MISMATCH, "Ready identity differs from session")
     }
+    readyAccepted = true
+    startStabilizationIfLatched()
+  }
+
+  private fun startStabilizationIfLatched() {
+    if (state != State.AWAITING_LATCHES || !entryCompleted || !readyAccepted) return
     timer?.let(scheduler::cancel)
     state = State.STABILIZING
     timer = scheduler.schedule(STABILIZATION_MILLIS) {

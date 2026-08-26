@@ -67,6 +67,48 @@ final class IOSHealthCoordinatorTests: XCTestCase {
         XCTAssertEqual(successes.get(), 1)
     }
 
+    func testReadyBeforeEntryStabilizesFromTheLaterLatch() {
+        let scheduler = FakeHealthScheduler(now: 100)
+        let commits = HealthTestBox(0)
+        let successes = HealthTestBox(0)
+        let failures = HealthTestBox<[WebCapsuleError]>([])
+        let coordinator = makeCoordinator(
+            scheduler: scheduler,
+            commit: { commits.mutate { $0 += 1 } },
+            success: { successes.mutate { $0 += 1 } },
+            failure: { error in failures.mutate { $0.append(error) } }
+        )
+        // didFinish is not observable from page scripts, so ready may arrive first.
+        coordinator.ready(body: validReadyJSON(), source: validReadySource())
+        scheduler.advance(by: IOSHealthCoordinator.stabilizationNanoseconds)
+        XCTAssertEqual(successes.get(), 0, "ready alone is not healthy")
+        XCTAssertTrue(failures.get().isEmpty, "an early ready is not a failure")
+
+        coordinator.entryLoaded()
+        scheduler.advance(by: IOSHealthCoordinator.stabilizationNanoseconds - 1)
+        XCTAssertEqual(commits.get(), 0, "stabilization is timed from the later latch")
+        scheduler.advance(by: 1)
+        XCTAssertEqual(commits.get(), 1)
+        XCTAssertEqual(successes.get(), 1)
+        XCTAssertTrue(failures.get().isEmpty)
+    }
+
+    func testEntryFailureAfterEarlyReadyStillFails() {
+        let scheduler = FakeHealthScheduler(now: 100)
+        let successes = HealthTestBox(0)
+        let failures = HealthTestBox<[WebCapsuleError]>([])
+        let coordinator = makeCoordinator(
+            scheduler: scheduler,
+            success: { successes.mutate { $0 += 1 } },
+            failure: { error in failures.mutate { $0.append(error) } }
+        )
+        coordinator.ready(body: validReadyJSON(), source: validReadySource())
+        coordinator.entryFailed("entry failed")
+        scheduler.advance(by: 30_000_000_000)
+        XCTAssertEqual(failures.get().map(\.code), [.entryLoadFailed])
+        XCTAssertEqual(successes.get(), 0)
+    }
+
     func testDeadlineIsExactlyFifteenSecondsFromSessionCreation() {
         let scheduler = FakeHealthScheduler(now: 100)
         let failures = HealthTestBox<[WebCapsuleError]>([])
@@ -93,14 +135,13 @@ final class IOSHealthCoordinatorTests: XCTestCase {
         XCTAssertEqual(boundary.get().map(\.code), [.readyTimeout])
     }
 
-    func testReadyBeforeEntryDuplicateReadyAndFatalDuringStabilizationFailOnce() {
+    func testDuplicateReadyAndFatalDuringStabilizationFailOnce() {
         let earlyScheduler = FakeHealthScheduler(now: 100)
         let early = HealthTestBox<[WebCapsuleError]>([])
         let beforeEntry = makeCoordinator(scheduler: earlyScheduler) { error in early.mutate { $0.append(error) } }
         beforeEntry.ready(body: validReadyJSON(), source: validReadySource())
-        beforeEntry.entryLoaded()
         beforeEntry.ready(body: validReadyJSON(), source: validReadySource())
-        XCTAssertEqual(early.get().map(\.code), [.readyMessageInvalid])
+        XCTAssertEqual(early.get().map(\.code), [.readyMessageInvalid], "a second ready is still a duplicate")
 
         let duplicateScheduler = FakeHealthScheduler(now: 100)
         let duplicate = HealthTestBox<[WebCapsuleError]>([])

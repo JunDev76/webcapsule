@@ -115,9 +115,12 @@ final class IOSHealthCoordinator: @unchecked Sendable {
     static let readyTimeoutNanoseconds: UInt64 = 15_000_000_000
     static let stabilizationNanoseconds: UInt64 = 3_000_000_000
 
+    /// Entry completion and a matching ready message are independent latches.
+    /// `WKNavigationDelegate.didFinish` is not observable from page scripts, so the
+    /// two signals race and no arrival order can be required of capsule content.
+    /// Stabilization starts once both latches are set, timed from the later one.
     private enum State {
-        case waitingForEntry
-        case waitingForReady
+        case awaitingLatches
         case stabilizing
         case succeeded
         case failed
@@ -132,7 +135,9 @@ final class IOSHealthCoordinator: @unchecked Sendable {
     private let success: @Sendable () -> Void
     private let failure: @Sendable (WebCapsuleError) -> Void
     private let lock = NSRecursiveLock()
-    private var state: State = .waitingForEntry
+    private var state: State = .awaitingLatches
+    private var entryCompleted = false
+    private var readyAccepted = false
     private var timer: AnyObject?
 
     init(
@@ -165,22 +170,26 @@ final class IOSHealthCoordinator: @unchecked Sendable {
     func entryLoaded() {
         lock.lock()
         defer { lock.unlock() }
-        if state == .waitingForEntry { state = .waitingForReady }
+        guard state == .awaitingLatches, !entryCompleted else { return }
+        entryCompleted = true
+        startStabilizationIfLatched()
     }
 
     func ready(body: String, source: ReadyMessageSource) {
         lock.lock()
         defer { lock.unlock() }
-        if state == .stabilizing {
+        guard state == .awaitingLatches else {
+            if state == .stabilizing || state == .succeeded {
+                failOnce(WebCapsuleError(code: .readyMessageInvalid, message: "Duplicate ready message"))
+            }
+            return
+        }
+        if readyAccepted {
             failOnce(WebCapsuleError(code: .readyMessageInvalid, message: "Duplicate ready message"))
             return
         }
         if scheduler.nowNanoseconds >= readyDeadlineNanoseconds {
             failOnce(WebCapsuleError(code: .readyTimeout, message: "Ready deadline expired"))
-            return
-        }
-        guard state == .waitingForReady else {
-            failOnce(WebCapsuleError(code: .readyMessageInvalid, message: "Ready arrived before entry completed"))
             return
         }
         guard source.isMainFrame,
@@ -210,6 +219,12 @@ final class IOSHealthCoordinator: @unchecked Sendable {
             failOnce(WebCapsuleError(code: .sessionMismatch, message: "Ready identity differs from session"))
             return
         }
+        readyAccepted = true
+        startStabilizationIfLatched()
+    }
+
+    private func startStabilizationIfLatched() {
+        guard state == .awaitingLatches, entryCompleted, readyAccepted else { return }
         cancelTimer()
         state = .stabilizing
         timer = scheduler.schedule(afterNanoseconds: Self.stabilizationNanoseconds) { [weak self] in

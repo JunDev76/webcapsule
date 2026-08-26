@@ -31,9 +31,9 @@ window.WebCapsuleBridge.postMessage(
 );
 ```
 
-The accepted type is exactly `"ready"`. Unknown, missing, duplicate, or incorrectly typed JSON fields fail the session. The message source must be the main frame at exactly `https://webcapsule.local`, and the entry page must already have completed loading.
+The accepted type is exactly `"ready"`. Unknown, missing, duplicate, or incorrectly typed JSON fields fail the session. The message source must be the main frame at exactly `https://webcapsule.local`. Entry completion and the ready message are independent conditions and may arrive in either order, so capsule content does not need to wait for the page to finish loading; sending it from an inline script is fine. A second ready message is rejected as a duplicate, and an entry load failure fails the session even if a valid ready already arrived.
 
-The ready deadline is 15 seconds from committed session creation using monotonic time. A valid message starts a three-second stabilization interval. Entry-load failure, navigation, an invalid or duplicate ready message, or render-process loss prevents a healthy commit and is recorded by the bounded rollback state machine. Normal view teardown only releases its process-local guard; it does not immediately record an explicit failure or refund the attempt.
+The ready deadline is 15 seconds from committed session creation using monotonic time. Once both entry completion and a matching ready are satisfied, the later of the two starts a three-second stabilization interval. Entry-load failure, navigation, an invalid or duplicate ready message, or render-process loss prevents a healthy commit and is recorded by the bounded rollback state machine. Normal view teardown only releases its process-local guard; it does not immediately record an explicit failure or refund the attempt.
 
 The dedicated WebView enables JavaScript and DOM storage and disables file access, content access, mixed content, multiple windows, and third-party cookies. Safe Browsing remains enabled.
 

@@ -198,9 +198,9 @@ The only accepted bridge message is strict JSON with exactly:
 }
 ```
 
-Unknown/missing fields, duplicate keys, non-string identifiers, another message type, or protocol version other than integer `1` are invalid. All identifiers MUST exactly match the pinned live session. Messages from another frame, origin, session, capsule, or version MUST be rejected. The entry document must have completed successfully before ready is accepted.
+Unknown/missing fields, duplicate keys, non-string identifiers, another message type, or protocol version other than integer `1` are invalid. All identifiers MUST exactly match the pinned live session. Messages from another frame, origin, session, capsule, or version MUST be rejected. Entry completion and a matching ready message are independent conditions and MAY arrive in either order: page scripts cannot observe the native page-finished callback, so no arrival order is required of capsule content. A ready message that arrives before entry completion is retained and evaluated under the same source and identity rules; it is not a failure by itself. A second ready message MUST be rejected as a duplicate regardless of order. Entry load failure MUST fail the session even when a valid ready already arrived.
 
-The ready deadline is exactly 15 seconds measured with Android monotonic time from committed session attempt. A matching ready starts an exact 3-second stabilization interval. Navigation, render-process death, entry load failure, or fatal bridge error during that interval fails stabilization. On success, the runtime atomically commits the registry transition in section 7. Wall-clock changes MUST NOT affect either interval.
+The ready deadline is exactly 15 seconds measured with Android monotonic time from committed session attempt. Once both entry completion and a matching ready are satisfied, the later of the two starts an exact 3-second stabilization interval. Navigation, render-process death, entry load failure, or fatal bridge error during that interval fails stabilization. On success, the runtime atomically commits the registry transition in section 7. Wall-clock changes MUST NOT affect either interval.
 
 ## 13. Shared error strings
 

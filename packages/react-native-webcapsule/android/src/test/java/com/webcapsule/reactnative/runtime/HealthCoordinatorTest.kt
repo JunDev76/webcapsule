@@ -31,6 +31,34 @@ class HealthCoordinatorTest {
     assertEquals(1, successes)
   }
 
+  @Test fun `ready before entry stabilizes from the later latch`() {
+    val scheduler = FakeScheduler(100)
+    var commits = 0; var successes = 0; val failures = mutableListOf<WebCapsuleException>()
+    val coordinator = coordinator(scheduler, { commits++ }, { successes++ }, failures::add)
+    // onPageFinished is not observable from page scripts, so ready may arrive first.
+    coordinator.ready(json(), HealthCoordinator.ORIGIN, true)
+    scheduler.advance(3_000)
+    assertEquals(0, successes)
+    assertTrue("an early ready is not a failure", failures.isEmpty())
+
+    coordinator.entryLoaded()
+    scheduler.advance(2_999)
+    assertEquals(0, commits)
+    scheduler.advance(1)
+    assertEquals(1, commits); assertEquals(1, successes); assertTrue(failures.isEmpty())
+  }
+
+  @Test fun `entry failure after an early ready still fails`() {
+    val scheduler = FakeScheduler(100)
+    var successes = 0; val failures = mutableListOf<WebCapsuleException>()
+    val coordinator = coordinator(scheduler, {}, { successes++ }, failures::add)
+    coordinator.ready(json(), HealthCoordinator.ORIGIN, true)
+    coordinator.entryFailed("entry failed")
+    scheduler.advance(20_000)
+    assertEquals(WebCapsuleErrorCode.ENTRY_LOAD_FAILED, failures.single().code)
+    assertEquals(0, successes)
+  }
+
   @Test fun `deadline is measured from session creation`() {
     val scheduler = FakeScheduler(15_099)
     val failures = mutableListOf<WebCapsuleException>()
@@ -47,6 +75,12 @@ class HealthCoordinatorTest {
     coordinator.ready(json(), HealthCoordinator.ORIGIN, true)
     assertEquals(1, failures.size)
     assertEquals(WebCapsuleErrorCode.READY_MESSAGE_INVALID, failures.single().code)
+
+    val duplicateFailures = mutableListOf<WebCapsuleException>()
+    val duplicate = coordinator(FakeScheduler(100), {}, {}, duplicateFailures::add)
+    duplicate.ready(json(), HealthCoordinator.ORIGIN, true)
+    duplicate.ready(json(), HealthCoordinator.ORIGIN, true)
+    assertEquals(WebCapsuleErrorCode.READY_MESSAGE_INVALID, duplicateFailures.single().code)
 
     val secondFailures = mutableListOf<WebCapsuleException>()
     val second = coordinator(scheduler, {}, {}, secondFailures::add)
