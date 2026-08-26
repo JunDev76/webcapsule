@@ -22,6 +22,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # examples/rn-demo는 생성 파일 demo-config.ts를 import하지만 이 파일은
+      # 서명 키에서 만들어지므로 gitignore 대상이다. lint와 typecheck 대상에
+      # 포함되어 있어 검사 전에 생성해야 한다.
+      - run: pnpm demo:build-content
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
