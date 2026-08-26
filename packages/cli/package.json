@@ -1,7 +1,10 @@
 {
   "name": "@webcapsule/cli",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "webcapsule": "./dist/index.js"
@@ -15,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@webcapsule/format": "workspace:*",
+    "@webcapsule/format": "workspace:^",
     "commander": "14.0.1",
     "mime-types": "3.0.1",
     "yauzl": "3.2.0",

@@ -100,7 +100,7 @@ importers:
   packages/cli:
     dependencies:
       '@webcapsule/format':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../format
       commander:
         specifier: 14.0.1
