@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebCapsule bundled v1</title>
+</head>
+<body>
+  <h1>WebCapsule debug content</h1>
+  <dl>
+    <dt>release</dt><dd>bundled-v1</dd>
+    <dt>version</dt><dd>1.0.0</dd>
+    <dt>expected lifecycle</dt><dd>healthy</dd>
+    <dt>network dependency</dt><dd>none</dd>
+    <dt>ready bridge</dt><dd id="ready">pending</dd>
+  </dl>
+  <pre id="session"></pre>
+  <script>
+    const session = globalThis.__WEBCAPSULE_SESSION__;
+    document.getElementById('session').textContent = JSON.stringify(session, null, 2);
+    globalThis.WebCapsuleBridge.postMessage(JSON.stringify(session));
+    document.getElementById('ready').textContent = 'sent';
+  </script>
+</body>
+</html>

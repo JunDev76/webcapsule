@@ -24,3 +24,8 @@ Thumbs.db
 AGENTS.md
 
 **/.build/
+
+# Locally generated demo signing material and artifacts
+examples/.demo-keys/
+examples/rn-demo/demo-config.ts
+examples/rn-demo/ios/WebCapsuleDemo/WebCapsule/*.capsule

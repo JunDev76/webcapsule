@@ -8,6 +8,10 @@
   },
   "scripts": {
     "build": "pnpm -r build",
+    "demo:build-content": "pnpm --filter @webcapsule/cli build && node scripts/build-demo-content.mjs",
+    "demo:ios:setup": "pnpm install && pnpm demo:build-content && pnpm --dir examples/rn-demo pod-install",
+    "demo:ios": "pnpm demo:build-content && pnpm --dir examples/rn-demo ios",
+    "demo:start": "pnpm --dir examples/rn-demo start",
     "fixtures:generate": "pnpm build && node scripts/generate-capsule-fixtures.mjs",
     "fixtures:check": "pnpm build && node scripts/check-capsule-fixtures.mjs",
     "android:compile": "packages/react-native-webcapsule/android/gradlew -p packages/react-native-webcapsule/android compileDebugKotlin",
