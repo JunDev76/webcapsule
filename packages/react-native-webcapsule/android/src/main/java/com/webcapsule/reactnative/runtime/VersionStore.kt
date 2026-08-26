@@ -27,6 +27,10 @@ class VersionStore(private val layout: StorageLayout, private val faultInjector:
       val finalRecord = File(finalDirectory, "record.json")
       if (Files.exists(finalRecord.toPath(), LinkOption.NOFOLLOW_LINKS)) {
         verifyPublishedVersion(finalDirectory, recordBytes, record)
+        // Settles a publication interrupted between linking and the permission
+        // change. The bytes were just proven identical, so this completes the
+        // last step instead of repairing content.
+        if (Files.isWritable(finalRecord.toPath())) ContentStore.makeReadOnly(finalRecord)
         return InstallResult(record, false, 0)
       }
       if (Files.exists(finalDirectory.toPath(), LinkOption.NOFOLLOW_LINKS))
@@ -42,7 +46,6 @@ class VersionStore(private val layout: StorageLayout, private val faultInjector:
       faultInjector.hit(InstallFaultPoint.BEFORE_RECORD_WRITE)
       val stagedRecord = File(capsule.operationDirectory, "record.json")
       writeNewSynced(stagedRecord, recordBytes)
-      ContentStore.makeReadOnly(stagedRecord)
       writeJournal(capsule.operationDirectory, record.capsuleId, record.version, finalDirectory)
       ContentStore.createDirectories(finalDirectory.parentFile!!)
       faultInjector.hit(InstallFaultPoint.BEFORE_VERSION_PUBLISH)
@@ -50,10 +53,14 @@ class VersionStore(private val layout: StorageLayout, private val faultInjector:
       catch (error: FileAlreadyExistsException) { fail(WebCapsuleErrorCode.STORAGE_INVARIANT_VIOLATION, "Version directory appeared before publication", error) }
       catch (error: Exception) { fail(WebCapsuleErrorCode.STORAGE_IO_FAILED, "Cannot create final version directory", error) }
       faultInjector.hit(InstallFaultPoint.AFTER_VERSION_DIRECTORY_CREATE)
+      // The staged record stays writable while linking: Android enforces
+      // fs.protected_hardlinks, which refuses link() when the caller cannot also
+      // write the source. The published inode is made read-only immediately after.
       try { Files.createLink(finalRecord.toPath(), stagedRecord.toPath()) }
       catch (error: UnsupportedOperationException) { cleanupOwnedEmptyDirectory(finalDirectory); fail(WebCapsuleErrorCode.ATOMIC_PUBLISH_UNSUPPORTED, "Filesystem does not support record hard-link publication", error) }
       catch (error: Exception) { cleanupOwnedEmptyDirectory(finalDirectory); fail(WebCapsuleErrorCode.ATOMIC_PUBLISH_UNSUPPORTED, "Record create-if-absent publication failed", error) }
       publishedRecord = true
+      ContentStore.makeReadOnly(finalRecord)
       faultInjector.hit(InstallFaultPoint.AFTER_VERSION_PUBLISH)
       verifyPublishedVersion(finalDirectory, recordBytes, record)
       return InstallResult(record, true, published)

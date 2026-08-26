@@ -38,13 +38,37 @@ class AndroidStorageFrameworkTest {
     assertEquals("old", destination.readText())
     assertEquals(oldKey, Files.readAttributes(destination.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java).fileKey())
 
+    // Publication order is link-then-chmod. Android enforces
+    // fs.protected_hardlinks, which refuses link() when the source is not
+    // writable by the caller, so the source must still be writable here.
     destination.delete()
-    Files.setPosixFilePermissions(source.toPath(), setOf(PosixFilePermission.OWNER_READ))
     Files.createLink(destination.toPath(), source.toPath())
     val sourceAttributes = Files.readAttributes(source.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java)
     val destinationAttributes = Files.readAttributes(destination.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java)
     assertEquals(sourceAttributes.fileKey(), destinationAttributes.fileKey())
+
+    // The shared inode is made read-only after linking, so both names observe it.
+    Files.setPosixFilePermissions(destination.toPath(), setOf(PosixFilePermission.OWNER_READ))
     assertFalse(Files.isWritable(destination.toPath()))
+    assertFalse(Files.isWritable(source.toPath()))
+
+    // Unlinking the staging name needs directory write permission, not file
+    // write permission, so it still succeeds against the read-only inode.
+    assertTrue(source.delete())
+    assertEquals("new", destination.readText())
+  }
+
+  @Test
+  fun linkingAReadOnlySourceIsRefusedByProtectedHardlinks() {
+    val root = directory("protected-hardlink")
+    val source = File(root, "source").apply { writeText("new") }
+    Files.setPosixFilePermissions(source.toPath(), setOf(PosixFilePermission.OWNER_READ))
+
+    // Documents why publication must not chmod before linking: the kernel treats
+    // a source the caller cannot write as an unsafe hard-link source.
+    assertThrows(java.nio.file.AccessDeniedException::class.java) {
+      Files.createLink(File(root, "destination").toPath(), source.toPath())
+    }
   }
 
   @Test

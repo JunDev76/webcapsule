@@ -105,6 +105,40 @@ class VersionStoreTest {
   }
 
   @Test
+  fun `blob publication interrupted before the permission change is settled on retry`() {
+    val layout = layout()
+    val capsule = capsule(layout, "1.0.0", "shared")
+    val destination = layout.blob(capsule.blobs.single().sha256)
+    destination.parentFile.mkdirs()
+    // A crash between hard-linking and the 0444 change leaves the published name
+    // byte-identical but still writable.
+    destination.writeText("shared")
+    assertTrue(destination.setWritable(true))
+    assertTrue(Files.isWritable(destination.toPath()))
+
+    val result = VersionStore(layout).install(capsule)
+    assertTrue(result.installed)
+    assertEquals(0, result.publishedBlobCount)
+    assertFalse(Files.isWritable(destination.toPath()))
+    assertEquals("shared", destination.readText())
+  }
+
+  @Test
+  fun `record publication interrupted before the permission change is settled on retry`() {
+    val layout = layout()
+    VersionStore(layout).install(capsule(layout, "1.0.0", "shared"))
+    val record = File(layout.versionDirectory("com.example.app", "1.0.0"), "record.json")
+    assertTrue(record.setWritable(true))
+    assertTrue(Files.isWritable(record.toPath()))
+    val expected = record.readText(StandardCharsets.UTF_8)
+
+    val result = VersionStore(layout).install(capsule(layout, "1.0.0", "shared"))
+    assertFalse(result.installed)
+    assertFalse(Files.isWritable(record.toPath()))
+    assertEquals(expected, record.readText(StandardCharsets.UTF_8))
+  }
+
+  @Test
   fun `record parser rejects noncanonical unknown and missing fields`() {
     val layout = layout()
     val capsule = capsule(layout, "1.0.0", "shared")
