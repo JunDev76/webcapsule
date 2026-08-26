@@ -1,22 +1,31 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WebCapsule broken v3</title>
-</head>
-<body>
-  <h1>WebCapsule debug content</h1>
-  <dl>
-    <dt>release</dt><dd>broken-v3</dd>
-    <dt>version</dt><dd>3.0.0</dd>
-    <dt>expected lifecycle</dt><dd>ready timeout, then rollback</dd>
-    <dt>network dependency</dt><dd>none</dd>
-    <dt>ready bridge</dt><dd>intentionally not sent</dd>
-  </dl>
-  <pre id="session"></pre>
-  <script>
-    document.getElementById('session').textContent = JSON.stringify(globalThis.__WEBCAPSULE_SESSION__, null, 2);
-  </script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebCapsule broken v3</title>
+  </head>
+  <body>
+    <h1>WebCapsule debug content</h1>
+    <dl>
+      <dt>release</dt>
+      <dd>broken-v3</dd>
+      <dt>version</dt>
+      <dd>3.0.0</dd>
+      <dt>expected lifecycle</dt>
+      <dd>ready timeout, then rollback</dd>
+      <dt>network dependency</dt>
+      <dd>none</dd>
+      <dt>ready bridge</dt>
+      <dd>intentionally not sent</dd>
+    </dl>
+    <pre id="session"></pre>
+    <script>
+      document.getElementById("session").textContent = JSON.stringify(
+        globalThis.__WEBCAPSULE_SESSION__,
+        null,
+        2,
+      );
+    </script>
+  </body>
 </html>

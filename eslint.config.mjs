@@ -12,6 +12,10 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    files: ["**/.eslintrc.js", "**/.prettierrc.js", "**/*.config.js"],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
